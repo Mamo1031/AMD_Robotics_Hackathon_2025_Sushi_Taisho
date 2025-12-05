@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv / Python packaging
+uv.lock
+*.egg-info/
+dist/
+build/
+
+# Logs and outputs
+logs/
+*.log
+
+# Data & models (keep only small metadata like .gitkeep)
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+
+# Checkpoints and large artifacts
+*.ckpt
+*.pth
+*.pt
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS / misc
+.DS_Store
+Thumbs.db
+
+

@@ -1,0 +1,7 @@
+# Training config for Sushi-Bot
+# NOTE: Values will be filled in during the hackathon.
+model:
+  name: TODO
+  learning_rate: 1e-4
+  batch_size: 32
+  epochs: 100
