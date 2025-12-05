@@ -16,8 +16,7 @@
 <!-- TODO: プロジェクトの詳細な説明を追記 -->
 This project demonstrates a robotic arm (SO-101) capable of picking up sushi samples from a moving conveyor belt.
 
-<!-- TODO: デモGIFへのリンクを差し替え -->
-![Sushi-Bot demo](assets/test.gif)
+![Sushi-Bot demo](assets/demo.gif)
 
 
 
