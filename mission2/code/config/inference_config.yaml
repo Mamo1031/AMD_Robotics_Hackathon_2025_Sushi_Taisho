@@ -1,0 +1,7 @@
+# Inference config for Sushi-Bot
+# NOTE: Values will be filled in during the hackathon.
+model:
+  checkpoint_path: models/TODO.ckpt
+inference:
+  mode: grasp
+  robot_ip: TODO
