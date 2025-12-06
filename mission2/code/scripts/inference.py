@@ -172,6 +172,10 @@ def evaluation(
     for name, param in model.named_parameters():
         assert not torch.isnan(param).any(), f"NaN in {name} parameter"
         assert not torch.isinf(param).any(), f"Inf in {name} parameter"
+    
+    # Move model to device
+    device_str = f"cuda:{device}" if device >= 0 else "cpu"
+    model = model.to(device_str)
 
     # Create a directory to store the video of the evaluation
     output_directory = Path(f"reports/{model_name}/seed:{seed}/")
@@ -201,10 +205,10 @@ def evaluation(
     # Get obs_length from config (same as dataset)
     obs_length = config.datamodule.obs_length
 
-    # Initialize image and state sequence buffers (FIFO queue)
-    # These will maintain obs_length frames of history
-    image_sequence_buffer = []
-    state_sequence_buffer = []
+    # Initialize embed buffers (FIFO queue) to save memory
+    # Store encoded embeddings instead of raw observations
+    obs_embed_buffer = []
+    pos_embed_buffer = []
 
     # Get initial observation from robot
     obs = robot.get_observation()
@@ -227,9 +231,9 @@ def evaluation(
     # Use the first image key
     image_key = image_keys[0]
 
-    # Helper function to process a single observation
-    def process_observation(observation_frame):
-        """Process a single observation frame and return image and state tensors."""
+    # Helper function to process and encode a single observation
+    def process_and_encode_observation(observation_frame):
+        """Process a single observation frame, encode it, and return embeddings."""
         state_np = observation_frame[OBS_STATE]
         if isinstance(state_np, torch.Tensor):
             state_np = state_np.cpu().numpy()
@@ -252,44 +256,59 @@ def evaluation(
         if image.max() > 1.0:
             image = image / 255.0
 
-        return image, state
+        # Normalize state using joint_transform
+        # Add batch dimension for joint_transform: (1, state_dim)
+        state_batch = state.unsqueeze(0)
+        state_batch = joint_transform(
+            state_batch,
+            data_config.stats["observation.state"]["max"],
+            data_config.stats["observation.state"]["min"],
+        )
+        state_normalized = state_batch[0]  # Remove batch dimension: (state_dim,)
 
-    # Initialize the sequence buffers with the first observation (repeat it obs_length times)
-    image, state = process_observation(observation_frame)
+        # Encode single observation
+        # Add batch and sequence dimensions: (1, 1, C, H, W) and (1, 1, state_dim)
+        image_batch = image.unsqueeze(0).unsqueeze(0).to(device_str)  # (1, 1, C, H, W)
+        state_batch = state_normalized.unsqueeze(0).unsqueeze(0).to(device_str)  # (1, 1, state_dim)
+
+        # Encode
+        if not model.cfg.obs_only:
+            obs_embed = model.encoder(image_batch)  # (1, 1, embed_dim)
+            obs_embed = obs_embed[0, 0]  # Remove batch and sequence dims: (embed_dim,)
+        else:
+            obs_embed = None
+
+        if not model.cfg.pos_only:
+            pos_embed = model.pos_encoder(state_batch)  # (1, 1, embed_dim)
+            pos_embed = pos_embed[0, 0]  # Remove batch and sequence dims: (embed_dim,)
+        else:
+            pos_embed = None
+
+        return obs_embed, pos_embed, state_normalized
+
+    # Initialize the embed buffers with the first observation (repeat it obs_length times)
+    obs_embed, pos_embed, state_normalized = process_and_encode_observation(observation_frame)
     for _ in range(obs_length):
-        image_sequence_buffer.append(image.clone())
-        state_sequence_buffer.append(state.clone())
+        if obs_embed is not None:
+            obs_embed_buffer.append(obs_embed.clone())
+        if pos_embed is not None:
+            pos_embed_buffer.append(pos_embed.clone())
 
-    # Transform state sequence using joint_transform (same as dataset)
-    # Stack states: (obs_length, state_dim)
-    state_sequence = torch.stack(state_sequence_buffer, dim=0)
-    state_sequence = joint_transform(
-        state_sequence,
-        data_config.stats["observation.state"]["max"],
-        data_config.stats["observation.state"]["min"],
-    )
-
-    # Stack images: (obs_length, C, H, W)
-    image_sequence = torch.stack(image_sequence_buffer, dim=0)
-
-    # Add batch dimension to match dataset format: (1, obs_length, C, H, W) and (1, obs_length, state_dim)
-    image_sequence = image_sequence.unsqueeze(0)  # (1, obs_length, C, H, W)
-    state_sequence = state_sequence.unsqueeze(0)  # (1, obs_length, state_dim)
-
-    # Encode the sequences (same as dataset)
-    obs_embed = model.encoder(image_sequence)  # (1, obs_length, embed_dim)
-    pos_embed = model.pos_encoder(state_sequence)  # (1, obs_length, embed_dim)
+    # Stack embeddings to match dataset format: (1, obs_length, embed_dim)
+    if obs_embed is not None:
+        obs_embed = torch.stack(obs_embed_buffer, dim=0).unsqueeze(0)  # (1, obs_length, embed_dim)
+    if pos_embed is not None:
+        pos_embed = torch.stack(pos_embed_buffer, dim=0).unsqueeze(0)  # (1, obs_length, embed_dim)
 
     # Initialize action from current state (as initial action)
-    # Use the last state in the sequence: state_sequence is (1, obs_length, state_dim)
-    action = state_sequence[0, -1].clone()  # (state_dim,)
+    action = state_normalized.clone()  # (state_dim,)
 
     step = 0
     done = False
 
     fps = 30  # Default FPS for timing control
 
-    goal = torch.tensor([task_index], dtype=torch.long, device=f"{model.device}")
+    goal = torch.tensor([task_index], dtype=torch.long, device=device_str)
     if model.cfg.goal_conditioned:
         goal_emb = model.goal_encoder(goal).reshape(1, 1, -1)  # (1, 1, embed_dim)
     else:
@@ -306,37 +325,30 @@ def evaluation(
         # Build dataset frame (following main() pattern)
         observation_frame = build_dataset_frame(dataset_features, obs_processed, prefix=OBS_STR)
 
-        # Process the new observation
-        image, state = process_observation(observation_frame)
+        # Process and encode the new observation
+        new_obs_embed, new_pos_embed, state_normalized = process_and_encode_observation(observation_frame)
 
-        # Update sequence buffers (FIFO queue)
-        # Remove the oldest observation and add the new one
-        image_sequence_buffer.pop(0)
-        image_sequence_buffer.append(image.clone())
-        state_sequence_buffer.pop(0)
-        state_sequence_buffer.append(state.clone())
+        # Update embed buffers (FIFO queue)
+        # Remove the oldest embedding and add the new one
+        if new_obs_embed is not None:
+            obs_embed_buffer.pop(0)
+            obs_embed_buffer.append(new_obs_embed.clone())
+        if new_pos_embed is not None:
+            pos_embed_buffer.pop(0)
+            pos_embed_buffer.append(new_pos_embed.clone())
 
-        # Stack sequences to match dataset format
-        # Stack states: (obs_length, state_dim)
-        state_sequence = torch.stack(state_sequence_buffer, dim=0)
-        state_sequence = joint_transform(
-            state_sequence,
-            data_config.stats["observation.state"]["max"],
-            data_config.stats["observation.state"]["min"],
-        )
+        # Stack embeddings to match dataset format: (1, obs_length, embed_dim)
+        if new_obs_embed is not None:
+            obs_embed = torch.stack(obs_embed_buffer, dim=0).unsqueeze(0)  # (1, obs_length, embed_dim)
+        else:
+            obs_embed = None
+        if new_pos_embed is not None:
+            pos_embed = torch.stack(pos_embed_buffer, dim=0).unsqueeze(0)  # (1, obs_length, embed_dim)
+        else:
+            pos_embed = None
 
-        # Stack images: (obs_length, C, H, W)
-        image_sequence = torch.stack(image_sequence_buffer, dim=0)
-
-        # Add batch dimension to match dataset format: (1, obs_length, C, H, W) and (1, obs_length, state_dim)
-        image_sequence = image_sequence.unsqueeze(0)  # (1, obs_length, C, H, W)
-        state_sequence = state_sequence.unsqueeze(0)  # (1, obs_length, state_dim)
-
-        # Encode the sequences (same as dataset)
-        obs_embed = model.encoder(image_sequence)  # (1, obs_length, embed_dim)
-        pos_embed = model.pos_encoder(state_sequence)  # (1, obs_length, embed_dim)
-
-        attentions.append(obs_embed)
+        if obs_embed is not None:
+            attentions.append(obs_embed)
         if step % inference_every == 0:
             action_chunk = model.inference(
                 batch_size=n_candidates, obs=obs_embed, pos=pos_embed, goal=goal_emb, initial_action=action
