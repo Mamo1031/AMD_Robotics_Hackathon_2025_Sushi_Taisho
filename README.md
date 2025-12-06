@@ -13,8 +13,7 @@
 
 
 ## 🎯 Summary
-<!-- TODO: プロジェクトの詳細な説明を追記 -->
-This project demonstrates a robotic arm (SO-101) capable of picking up sushi samples from a moving conveyor belt.
+This project simulates a rotary sushi bar ('Kaiten-sushi') using a motorized toy train track. The SO-101 robot arm is tasked with dynamically tracking and picking up sushi samples moving along the rails.
 
 ![Sushi-Bot demo](assets/demo.gif)
 
