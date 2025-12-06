@@ -14,14 +14,14 @@ datamodule:
   seed: ${seed}
   action_noise: false
   id: lerobot-rope
-  n_iterations: 100
+  n_iterations: 10
   policy_length: ${policy.policy_length}
   obs_length: ${policy.n_obs_steps}
 
 policy:
   _target_: mission2.PolicyConfig
   obs_shape: ${obs_shape}
-  obs_dim: 32
+  obs_dim: 128
   action_dim: ${action_dim}
   policy_length: 32
   n_obs_steps: 1
@@ -90,12 +90,12 @@ policy:
     _target_: ml_networks.EncoderConfig
     backbone:
       _target_: ml_networks.ConvNetConfig
-      channels: [16, 32, 16]
+      channels: [32, 64, 64]
       conv_cfgs:
         - 
           _target_: ml_networks.ConvConfig
           kernel_size: 7
-          stride: 1
+          stride: 2
           padding: 0
           norm: group
           norm_cfg:
@@ -149,4 +149,4 @@ callbacks:
   
   -
     _target_: mission2.VisualizePrediction
-    save_every_n_epoch: 50
+    save_every_n_epoch: 10

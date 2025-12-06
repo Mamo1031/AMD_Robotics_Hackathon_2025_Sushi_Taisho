@@ -7,7 +7,6 @@ The actual inference logic will be implemented during the AMD Open Robotics Hack
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import time
@@ -16,6 +15,8 @@ from pathlib import Path
 import numpy
 import torch
 from hydra.utils import instantiate
+from lerobot.configs import parser
+from lerobot.configs.parser import get_cli_overrides
 from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
 from lerobot.datasets.utils import build_dataset_frame
 from lerobot.policies.utils import make_robot_action
@@ -23,9 +24,7 @@ from lerobot.processor import (
     RobotAction,
     make_default_processors,
 )
-from lerobot.configs.parser import get_cli_overrides
 from lerobot.robots import RobotConfig, make_robot_from_config
-from lerobot.robots.so100_follower.config_so100_follower import SO100FollowerConfig
 from lerobot.utils.constants import OBS_IMAGES, OBS_STATE, OBS_STR
 from lerobot.utils.robot_utils import precise_sleep
 from ml_networks import torch_fix_seed
@@ -314,37 +313,6 @@ def evaluation(
     )
 
 
-def parse_robot_config_from_cli() -> RobotConfig | None:
-    """
-    Parse robot config from CLI arguments using the same method as lerobot_record.py.
-    
-    This function uses get_cli_overrides("robot") to extract --robot.* arguments
-    and parses them using draccus, similar to how @parser.wrap() works in lerobot_record.py.
-    
-    Returns:
-        RobotConfig instance if --robot.* arguments are provided, None otherwise.
-        
-    Example CLI usage:
-        --robot.type=so101_follower --robot.port=/dev/ttyACM1 --robot.id=my_robot
-    """
-    import draccus
-    
-    try:
-        cli_overrides = get_cli_overrides("robot")
-        if cli_overrides:
-            robot_config = draccus.parse(config_class=RobotConfig, args=cli_overrides)
-            logging.info(f"robot_config parsed from CLI: {robot_config}")
-            return robot_config
-        else:
-            return None
-    except Exception as e:
-        logging.warning(
-            f"Failed to parse robot config from CLI using --robot.* arguments: {e}. "
-            "You can provide robot config via --robot-config file or individual --robot-* arguments."
-        )
-        return None
-
-
 if __name__ == "__main__":
     # Run evaluation mode
     parser = argparse.ArgumentParser(description="Evaluate a pre-trained diffusion policy.")
@@ -381,13 +349,29 @@ if __name__ == "__main__":
         default=None,
         help="list of adjusting methods",
     )
-    
-    # Robot config options: either use a config file or specify individual parameters
     parser.add_argument(
-        "--robot-config",
+        "--robot.type",
         type=str,
-        default=None,
-        help="Path to robot config YAML/JSON file. If not provided, use --robot-type, --robot-port, etc.",
+        default="so101_follower",
+        help="Type of robot to use (e.g., so100_follower)",
+    )
+    parser.add_argument(
+        "--robot.port",
+        type=str,
+        default="/dev/ttyACM1",
+        help="Port for robot connection (e.g., /dev/ttyUSB0)",
+    )
+    parser.add_argument(
+        "--robot.id",
+        type=str,
+        default="my_awesome_follower_arm",
+        help="Baudrate for robot connection",
+    )
+    parser.add_argument(
+        "--robot.cameras",
+        type=str,
+        default="{ main: {type: opencv, index_or_path: /dev/video4, width: 320, height: 240, fps: 30}}" ,
+        help="Baudrate for robot connection",
     )
 
     args = parser.parse_args()
@@ -395,31 +379,28 @@ if __name__ == "__main__":
     print(args.dataset)
     print("=======================")
 
-    
-    import draccus
-    from lerobot.cameras import CameraConfig
-    from pathlib import Path
-
+    # Parse robot config from command line arguments
+    # Following lerobot_record.py pattern, robot config can be passed via CLI
+    # For example: --robot.type=so100_follower --robot.port=/dev/ttyUSB0
+    robot_config = None
     try:
-        if args.robot_config:
-            # Load robot config from file
-            print("Loading robot_config from file:", args.robot_config)
-            config = OmegaConf.load(args.robot_config)
-            robot_config = instantiate(config)
-            print(f"robot_config loaded from file: {robot_config}")
-        else:
-            raise ValueError(
-                "Either --robot.* arguments (e.g., --robot.type=so101_follower --robot.port=/dev/ttyACM1), "
-                "--robot-config file, or both --robot-type and --robot-port must be provided."
-            )
+        # Try to parse robot config from CLI arguments
+        cli_overrides = get_cli_overrides("robot")
+        if cli_overrides:
+            # Use draccus to parse robot config from CLI
+            import draccus
+
+            # Import robot config classes
+            from lerobot.robots import RobotConfig
+
+            # Parse robot config using draccus
+            robot_config = draccus.parse(config_class=RobotConfig, args=cli_overrides)
+            print("robot_config from CLI:", robot_config)
     except Exception as e:
-        logging.error(
-            f"Failed to create robot config: {e}. "
-            "Please provide either --robot.* arguments (like lerobot_record.py), "
-            "--robot-config file, or --robot-type and --robot-port."
+        logging.warning(
+            f"Failed to parse robot config from CLI: {e}. Please provide robot config via --robot.* arguments."
         )
-        raise
-    
+        
 
     print("args.model", args.model)
     print("args.dataset", args.dataset)
