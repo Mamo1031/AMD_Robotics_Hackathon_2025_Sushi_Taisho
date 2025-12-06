@@ -190,7 +190,9 @@ class CogBotsDataset(LeRobotDataset):
 
     def __getitem__(self, idx: int):
         res = super().__getitem__(idx)
-        obs = res["observation.images.main"].unsqueeze(0)  # Remove the batch dimension
+        obs = res["observation.images.main"]  # Remove the batch dimension
+        if obs.ndim == 3:
+            obs = obs.unsqueeze(0)
         action = joint_transform(res["action"], self.metadata.stats["action"]["max"], self.metadata.stats["action"]["min"])
         state = res["observation.state"]
         state = joint_transform(state, self.metadata.stats["observation.state"]["max"], self.metadata.stats["observation.state"]["min"])
