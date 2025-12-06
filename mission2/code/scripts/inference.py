@@ -405,7 +405,7 @@ if __name__ == "__main__":
             # Load robot config from file
             print("Loading robot_config from file:", args.robot_config)
             config = OmegaConf.load(args.robot_config)
-            robot_config = instantiate(config)
+            robot_config = instantiate(config, _recursive_=True, _convert_="object")
             print(f"robot_config loaded from file: {robot_config}")
         else:
             raise ValueError(

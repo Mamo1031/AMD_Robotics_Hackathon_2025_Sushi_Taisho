@@ -1,4 +1,4 @@
-_target_: lerobot.robots.so100_follower.config_so100_follower.SO100FollowerConfig
+_target_: lerobot.robots.so101_follower.config_so101_follower.SO101FollowerConfig
 port: /dev/ttyACM1
 id: my_awesome_follower_arm
 cameras:
