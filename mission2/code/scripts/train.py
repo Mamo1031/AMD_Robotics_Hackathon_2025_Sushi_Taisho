@@ -67,9 +67,10 @@ def main(
     config.datamodule.id = dataset
 
     data_config = LeRobotDatasetMetadata(config.datamodule.id)
-    print(data_config.stats["action"])
     config.action_dim = data_config.features["action"]["shape"][0]
-    config.obs_shape = list(data_config.features["observation.image"]["shape"])[::-1]
+    print(data_config.features.keys())
+    print(data_config.features["task_index"])
+    config.obs_shape = list(data_config.features["observation.images.wrist"]["shape"])[::-1]
     print(config.obs_shape)
     config.datamodule.adjusting_methods = adjusting_methods
 
@@ -84,7 +85,7 @@ def main(
 
     callbacks = config.callbacks
 
-    tags = [f"seed_{config.seed}", f"{config.datamodule.env}"]
+    tags = [f"seed_{config.seed}", f"{config.datamodule.id}"]
     if adjusting_methods is not None:
         tags += adjusting_methods
 
@@ -105,7 +106,7 @@ def main(
     if isinstance(config.policy.framework_cfg, StreamingFlowMatchingConfig):
         model = StreamingPolicy(config.policy)
     else:
-        model = Policy(config.policy)
+        model = Policy(data_config.features["task_index"]["shape"], config.policy)
     config.dictcfg2dict()
 
     datamodule = DatasetModule(

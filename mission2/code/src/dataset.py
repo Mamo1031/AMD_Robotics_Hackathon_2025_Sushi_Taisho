@@ -174,7 +174,7 @@ class CogBotsDataset(LeRobotDataset):
             # Load the previous image and state at -0.1 seconds before current frame,
             # then load current image and state corresponding to 0.0 second.
             # "observation.image": [-0.1, 0.0],
-            "observation.image": [-1/cfg.fps * i for i in range(0, cfg.obs_length)][::-1],
+            "observation.images.wrist": [-1/cfg.fps * i for i in range(0, cfg.obs_length)][::-1],
             "observation.state": [-1/cfg.fps * i for i in range(0, cfg.obs_length)][::-1],
             # Load the previous action (-0.1), the next action to be executed (0.0),
             # and 14 future actions with a 0.1 seconds spacing. All these actions will be
@@ -190,13 +190,12 @@ class CogBotsDataset(LeRobotDataset):
 
     def __getitem__(self, idx: int):
         res = super().__getitem__(idx)
-        obs = res["observation.image"].unsqueeze(0)  # Remove the batch dimension
+        obs = res["observation.images.wrist"].unsqueeze(0)  # Remove the batch dimension
         action = joint_transform(res["action"], self.metadata.stats["action"]["max"], self.metadata.stats["action"]["min"])
         state = res["observation.state"]
         state = joint_transform(state, self.metadata.stats["observation.state"]["max"], self.metadata.stats["observation.state"]["min"])
-        goal = torch.randn_like(obs[:, -1:])  # Random goal, can be modified as needed
 
-        return obs, action, state, goal
+        return obs, action, state, res["task_index"]
 
     def sample_paths(self, n_data: int):
         """Sample n_data random paths from the dataset.
