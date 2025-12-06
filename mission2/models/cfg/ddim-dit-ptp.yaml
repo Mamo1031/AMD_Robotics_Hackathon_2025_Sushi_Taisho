@@ -127,4 +127,4 @@ callbacks:
 - _target_: mission2.RichProgressBar
 - _target_: mission2.VisualizePrediction
   save_every_n_epoch: 1
-run_path: active-inference/lerobot/esasr4iv
+run_path: active-inference/lerobot/97p4siva
