@@ -13,6 +13,7 @@ import os
 import time
 from pathlib import Path
 import tempfile
+from typing import Literal
 
 import numpy
 import torch
@@ -55,6 +56,7 @@ def evaluation(
     max_steps: int = 300,
     n_candidates: int = 1,
     robot_config: RobotConfig | None = None,
+    task: Literal["Salmon", "Tuna", "Egg"] = "Salmon"
 ):
     """
     This script evaluates a pre-trained diffusion policy.
@@ -69,7 +71,7 @@ def evaluation(
 
     data_config = LeRobotDatasetMetadata(config.datamodule.id)
     config.action_dim = data_config.features["action"]["shape"][0]
-    config.obs_shape = list(data_config.features["observation.images.main"]["shape"])[::-1]
+    config.obs_shape = list(data_config.features["observation.images.wrist"]["shape"])[::-1]
 
     torch_fix_seed(config.seed)
 
@@ -77,6 +79,8 @@ def evaluation(
     config: ExperimentConfig = instantiate(
         config,
     )
+    
+    task_index = {"Salmon": 0, "Tuna": 1, "Egg": 2}[task]
 
     path = f"models/params/{config.datamodule.id}/{model_name}/seed:{config.seed}/"
     if adjusting_methods is not None:
@@ -285,6 +289,11 @@ def evaluation(
 
     fps = 30  # Default FPS for timing control
 
+    goal = torch.tensor([task_index], dtype=torch.long, device=f"{model.device}")
+    if model.cfg.goal_conditioned:
+        goal_emb = model.goal_encoder(goal).reshape(1, 1, -1)  # (1, 1, embed_dim)
+    else:
+        goal_emb = None
     for t in track(range(max_steps)):
         start_loop_t = time.perf_counter()
 
@@ -330,7 +339,7 @@ def evaluation(
         attentions.append(obs_embed)
         if step % inference_every == 0:
             action_chunk = model.inference(
-                batch_size=n_candidates, obs=obs_embed, pos=pos_embed, initial_action=action
+                batch_size=n_candidates, obs=obs_embed, pos=pos_embed, goal=goal_emb, initial_action=action
             )
             action_chunk = action_chunk.mean(dim=0)
 
