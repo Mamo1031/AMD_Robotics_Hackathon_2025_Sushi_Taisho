@@ -352,7 +352,8 @@ def evaluation(
             attentions.append(obs_embed)
         if step % inference_every == 0:
             action_chunk = model.inference(
-                batch_size=n_candidates, obs=obs_embed, pos=pos_embed, goal=goal_emb, initial_action=action
+                batch_size=n_candidates, 
+                obs=obs_embed, pos=pos_embed, goal=goal_emb, initial_action=action
             )
             if len(action_buffer) > model.cfg.n_obs_steps and model.cfg.pred_obs_action:
                 action_buffer = action_buffer[-model.cfg.n_obs_steps:].unsqueeze(0)  # (1, n_obs_steps, action_dim)
@@ -365,10 +366,10 @@ def evaluation(
 
         action = action_chunk[step % inference_every]
         action_buffer.append(action.clone().detach())
-        action = action.detach().clone().clamp(-1.0, 1.0)
+        action = action.clamp(-1.0, 1.0)
 
-        action = joint_detransform(
-            action.unsqueeze(0),
+        unnormalized_action = joint_detransform(
+            action.unsqueeze(0).detach().clone(),
             data_config.stats["action"]["max"],
             data_config.stats["action"]["min"],
         ).squeeze(0)
@@ -376,7 +377,7 @@ def evaluation(
 
         # Convert action to RobotAction format (following main() pattern)
         # make_robot_action expects a tensor, so we pass the action tensor directly
-        act_processed_policy: RobotAction = make_robot_action(action, dataset_features)
+        act_processed_policy: RobotAction = make_robot_action(unnormalized_action, dataset_features)
 
         # Applies a pipeline to the action (following main() pattern)
         robot_action_to_send = robot_action_processor((act_processed_policy, obs))
