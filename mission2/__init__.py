@@ -3,7 +3,7 @@
 from .code.src.backbone import DiT, TransformerPolicy, SinusoidalPosEmb
 
 # Callbacks
-from .code.src.callbacks import RichProgressBar, VisualizePrediction
+from .code.src.callbacks import RichProgressBar, VisualizePrediction, WandbModelCheckpoint
 
 # Config classes
 from .code.src.config import (
@@ -53,6 +53,7 @@ __all__ = [
     # Callbacks
     "RichProgressBar",
     "VisualizePrediction",
+    "WandbModelCheckpoint",
     # Config classes
     "DiffuserConfig",
     "FlowMatchingConfig",
