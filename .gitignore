@@ -41,8 +41,3 @@ models/*
 # OS / misc
 .DS_Store
 Thumbs.db
-
-# Large media files (use Git LFS or external hosting)
-assets/*.gif
-!assets/.gitkeep
-
