@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import torch.nn.functional as F
 import os
 import time
 from pathlib import Path
@@ -313,6 +314,7 @@ def evaluation(
         goal_emb = model.goal_encoder(goal).reshape(1, 1, -1)  # (1, 1, embed_dim)
     else:
         goal_emb = None
+    action_buffer = []
     for t in track(range(max_steps)):
         start_loop_t = time.perf_counter()
 
@@ -353,9 +355,17 @@ def evaluation(
             action_chunk = model.inference(
                 batch_size=n_candidates, obs=obs_embed, pos=pos_embed, goal=goal_emb, initial_action=action
             )
-            action_chunk = action_chunk.mean(dim=0)
+            if len(action_buffer) > model.cfg.n_obs_steps and model.cfg.pred_obs_action:
+                action_buffer = action_buffer[-model.cfg.n_obs_steps:].unsqueeze(0)  # (1, n_obs_steps, action_dim)
+                past_actions = action_chunk[:, : model.cfg.n_obs_steps, :]
+                diff = F.l1_loss(past_actions, action_buffer, reduction="none").sum(dim=[-1, -2])  # (batch_size, n_obs_steps, action_dim)
+                argmin = diff.argmin().item()
+                action_chunk = action_chunk[argmin]
+            else:
+                action_chunk = action_chunk.mean(dim=0)
 
         action = action_chunk[step % inference_every]
+        action_buffer.append(action.clone().detach())
 
         # Convert action to RobotAction format (following main() pattern)
         # make_robot_action expects a tensor, so we pass the action tensor directly
