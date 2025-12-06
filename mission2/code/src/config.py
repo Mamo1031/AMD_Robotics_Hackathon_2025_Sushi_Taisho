@@ -144,12 +144,11 @@ class DiTConfig:
 
     input_dim: int
     cond_step: int
+    cond_dim: int
     horizon: int
     d_model: int
     nhead: int
     mlp_ratio: float
-    time_emb: Union[PosEmbConfig, ml.SoftmaxTransConfig]
-    cond_cfg: ml.MLPConfig
     n_layers: int
     learn_sigma: bool = True
 

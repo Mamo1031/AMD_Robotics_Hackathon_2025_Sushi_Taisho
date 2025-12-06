@@ -327,24 +327,14 @@ class DiT(nn.Module):
 
         T = cfg.horizon + pred_obs_action * cfg.cond_step 
         T_cond = cfg.cond_step
+        self.T_cond = T_cond
 
         # input embedding stem
         self.input_emb = nn.Linear(cfg.input_dim, cfg.d_model)
+        self.cond_emb = nn.Linear(cfg.cond_dim, cfg.d_model)
 
 
         # cond encoder
-        self.time_emb = SinusoidalPosEmb(
-            cfg.time_emb.vector, cfg.time_emb.scale
-        ) if isinstance(
-            cfg.time_emb, PosEmbConfig
-        ) else ml.SoftmaxTransformation(
-            cfg.time_emb
-        )
-        self.time_encoder = ml.MLPLayer(
-            cfg.time_emb.vector, 
-            cfg.d_model, 
-            cfg.cond_cfg
-        )
         self.learn_sigma = cfg.learn_sigma
         self.num_heads = cfg.nhead
 
