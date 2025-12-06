@@ -318,6 +318,7 @@ class DiT(nn.Module):
         self,
         pred_obs_action: bool,
         pred_variance: bool,
+        cond_step: int,
         cfg: DiTConfig,
     ):
         super().__init__()
@@ -325,7 +326,7 @@ class DiT(nn.Module):
         self.pred_variance = pred_variance
 
 
-        T = cfg.horizon + pred_obs_action * cfg.cond_step 
+        T = cfg.horizon + pred_obs_action * cond_step 
         T_cond = cfg.cond_step
         self.T_cond = T_cond
 

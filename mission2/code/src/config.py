@@ -56,16 +56,11 @@ class DatasetConfig:
     fps: int = 10
     policy_length: int = 32
     obs_length: int = 1
-    train_episodes: Optional[Tuple[int, ...]] = None
-    val_episodes: Optional[Tuple[int, ...]] = None
+    pred_obs_action: bool = False
 
     def __post_init__(self):
         if isinstance(self.adjusting_methods, list) or isinstance(self.adjusting_methods, ListConfig):
             self.adjusting_methods = tuple(self.adjusting_methods)
-        if isinstance(self.train_episodes, list) or isinstance(self.train_episodes, ListConfig):
-            self.train_episodes = tuple(self.train_episodes)
-        if isinstance(self.val_episodes, list) or isinstance(self.val_episodes, ListConfig):
-            self.val_episodes = tuple(self.val_episodes)
 
 @dataclass
 class PosEmbConfig:

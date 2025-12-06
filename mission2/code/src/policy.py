@@ -95,8 +95,8 @@ class CondWrapper(nn.Module):
 class PolicyBase(pl.LightningModule):
     def __init__(self, n_task: int, cfg: PolicyConfig):
         super().__init__()
-        self.register_buffer("noise_mean", torch.zeros(1, cfg.policy_length, cfg.action_dim))
-        self.register_buffer("noise_std", torch.ones(1, cfg.policy_length, cfg.action_dim))
+        self.register_buffer("noise_mean", torch.zeros(1, cfg.policy_length+cfg.n_obs_steps*cfg.pred_obs_action, cfg.action_dim))
+        self.register_buffer("noise_std", torch.ones(1, cfg.policy_length+cfg.n_obs_steps*cfg.pred_obs_action, cfg.action_dim))
 
         print("n_task", n_task)
 
@@ -243,7 +243,7 @@ class Policy(PolicyBase):
                 cfg.policy)
         elif isinstance(cfg.policy, DiTConfig):
             cfg.policy.cond_step = cond_step
-            self.policy = DiT(cfg.pred_obs_action, False, cfg.policy)
+            self.policy = DiT(cfg.pred_obs_action, False, cfg.n_obs_steps,  cfg.policy)
         else:
             raise ValueError("Unsupported policy type")
 

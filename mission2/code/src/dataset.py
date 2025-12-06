@@ -179,7 +179,8 @@ class CogBotsDataset(LeRobotDataset):
             # Load the previous action (-0.1), the next action to be executed (0.0),
             # and 14 future actions with a 0.1 seconds spacing. All these actions will be
             # used to supervise the policy.
-            "action": [1/cfg.fps * (i+1) for i in range(cfg.policy_length)],
+            "action": [1/cfg.fps * (i+1) for i in range(cfg.policy_length)] if not cfg.pred_obs_action else \
+            [-1/cfg.fps * cfg.obs_length + 1/cfg.fps * i for i in range(cfg.obs_length+cfg.policy_length)],
         }
         print(f"delta_timestamps: {delta_timestamps}")
 
