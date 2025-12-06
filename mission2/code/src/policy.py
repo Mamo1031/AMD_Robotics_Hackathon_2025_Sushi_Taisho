@@ -131,7 +131,7 @@ class PolicyBase(pl.LightningModule):
 
         if cfg.goal_conditioned:
             self.goal_encoder = nn.Sequential(
-                nn.Embedding(n_task[0], cfg.obs_dim),
+                nn.Embedding(n_task, cfg.obs_dim),
                 ml.MLPLayer(
                     cfg.obs_dim, 
                     cfg.obs_dim,
