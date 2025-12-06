@@ -90,7 +90,7 @@ def main(
         tags += adjusting_methods
 
     os.makedirs("wandb", exist_ok=True)
-    name = f"{config.datamodule.id}_{model_name}_seed={config.seed}"
+    name = f"{config.datamodule.id.split("/")[-1]}_{model_name}_seed={config.seed}"
     logger = WandbLogger(
         name=name,
         project="lerobot",
