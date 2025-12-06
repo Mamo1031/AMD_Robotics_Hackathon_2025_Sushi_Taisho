@@ -138,6 +138,7 @@ AMD_Robotics_Hackathon_2025_Sushi_Taisho/
 │   └── wandb/
 │       └── [latest run directory copied from wandb of your training job]
 └── mission2/
+    ├── README.md              # Mission 2の詳細な使用方法
     ├── code/
     │   ├── config/
     │   │   ├── training_config.yaml
@@ -151,6 +152,12 @@ AMD_Robotics_Hackathon_2025_Sushi_Taisho/
     └── wandb/
         └── [latest run directory copied from wandb of your training job]
 ```
+
+## 📖 Mission別ドキュメント
+
+各ミッションの詳細な使用方法については、以下のドキュメントを参照してください：
+
+- **[Mission 2: Flow Matching Policy](mission2/README.md)** - Flow Matchingベースのポリシー学習・推論システムの使用方法
 
 
 
