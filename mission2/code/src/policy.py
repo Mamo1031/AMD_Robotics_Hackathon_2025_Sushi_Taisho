@@ -360,8 +360,6 @@ class Policy(PolicyBase):
                     ).prev_sample
 
 
-        if self.cfg.pred_obs_action:
-            trajectory = trajectory[:, self.cfg.n_obs_steps:, :]
         return trajectory
 
     def _shared_step(self, batch):
