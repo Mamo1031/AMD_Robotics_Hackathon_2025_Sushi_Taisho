@@ -110,7 +110,7 @@ def main(
         path += "_".join(adjusting_methods) + "/"
     os.makedirs(path, exist_ok=True)
     if isinstance(config.policy.framework_cfg, StreamingFlowMatchingConfig):
-        model = StreamingPolicy(config.policy)
+        model = StreamingPolicy(data_config.total_tasks, config.policy)
     else:
         model = Policy(data_config.total_tasks, config.policy)
     config.dictcfg2dict()

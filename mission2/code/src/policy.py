@@ -436,8 +436,8 @@ class Policy(PolicyBase):
 
 
 class StreamingPolicy(PolicyBase):
-    def __init__(self, cfg: PolicyConfig):
-        super().__init__(cfg)
+    def __init__(self, n_tasks: int, cfg: PolicyConfig):
+        super().__init__(n_tasks, cfg)
 
         cond_step = cfg.n_obs_steps
 
@@ -532,7 +532,7 @@ class StreamingPolicy(PolicyBase):
             pos_emb = self.pos_encoder(pos)
             cond = torch.cat([obs_emb, pos_emb], dim=-2)
         if self.cfg.goal_conditioned:
-            goal_emb = self.encoder(goal)
+            goal_emb = self.goal_encoder(goal).unsqueeze(-2)
 
             cond = torch.cat([cond, goal_emb], dim=-2)
 
