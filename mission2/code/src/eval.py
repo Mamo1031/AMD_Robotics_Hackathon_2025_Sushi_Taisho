@@ -9,8 +9,8 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from .dataset import DatasetModule
 from .utils import visualize_attention_video, visualize_joint_prediction
-from src.s3fmp.policy import Policy, EMPolicy
-from src.s3fmp.config import ExperimentConfig, TrainerConfig
+from .policy import Policy
+from .config import ExperimentConfig, TrainerConfig
 from ml_networks import torch_fix_seed
 import logging
 class SuppressSeedMessage(logging.Filter):
@@ -40,7 +40,7 @@ warnings.filterwarnings("ignore", ".*Tight.*")
 
 
 @torch.no_grad()
-def main(
+def eval(
     model_name: str,
     seed: int,
     device: int,

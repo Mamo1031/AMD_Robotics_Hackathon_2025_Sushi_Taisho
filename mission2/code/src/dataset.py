@@ -184,7 +184,7 @@ class CogBotsDataset(LeRobotDataset):
         print(f"delta_timestamps: {delta_timestamps}")
 
         super().__init__(cfg.id, delta_timestamps=delta_timestamps)
-        self.metadata = LeRobotDatasetMetadata("lerobot/pusht")
+        self.metadata = LeRobotDatasetMetadata(cfg.id)
         self.cfg = cfg
         self.train = train
 
@@ -194,9 +194,62 @@ class CogBotsDataset(LeRobotDataset):
         action = joint_transform(res["action"], self.metadata.stats["action"]["max"], self.metadata.stats["action"]["min"])
         state = res["observation.state"]
         state = joint_transform(state, self.metadata.stats["observation.state"]["max"], self.metadata.stats["observation.state"]["min"])
-        goal = torch.randn_like(obs[:, -1:])  # Random goal for push_t dataset, can be modified as needed
+        goal = torch.randn_like(obs[:, -1:])  # Random goal, can be modified as needed
 
-        return obs, action, state, goal 
+        return obs, action, state, goal
+
+    def sample_paths(self, n_data: int):
+        """Sample n_data random paths from the dataset.
+        
+        Returns:
+            tuple: (rgb, target, pos, goal) tensors
+        """
+        import random
+        indices = random.sample(range(len(self)), min(n_data, len(self)))
+        rgb_list = []
+        target_list = []
+        pos_list = []
+        goal_list = []
+        
+        for idx in indices:
+            obs, action, state, goal = self[idx]
+            rgb_list.append(obs)
+            target_list.append(action)
+            pos_list.append(state)
+            goal_list.append(goal)
+        
+        rgb = torch.stack(rgb_list, dim=0)
+        target = torch.stack(target_list, dim=0)
+        pos = torch.stack(pos_list, dim=0)
+        goal = torch.stack(goal_list, dim=0)
+        
+        return rgb, target, pos, goal
+
+    def sample_img_seq(self, n_data: int, seq_length: int):
+        """Sample n_data image sequences of length seq_length from the dataset.
+        
+        Returns:
+            torch.Tensor: Image sequences of shape (n_data, seq_length, C, H, W)
+        """
+        import random
+        indices = random.sample(range(len(self)), min(n_data, len(self)))
+        img_seqs = []
+        
+        for idx in indices:
+            obs, _, _, _ = self[idx]
+            # obs shape: (1, obs_length, C, H, W) or similar
+            # We need to extract a sequence of length seq_length
+            if obs.shape[1] >= seq_length:
+                seq = obs[0, :seq_length]  # (seq_length, C, H, W)
+            else:
+                # Pad or repeat if sequence is shorter
+                seq = obs[0]
+                while seq.shape[0] < seq_length:
+                    seq = torch.cat([seq, obs[0]], dim=0)
+                seq = seq[:seq_length]
+            img_seqs.append(seq)
+        
+        return torch.stack(img_seqs, dim=0)  # (n_data, seq_length, C, H, W) 
 
 
 
@@ -209,7 +262,7 @@ class DatasetModule(pl.LightningDataModule):
         self.batch_size = cfg.batch_size
         self.cfg = cfg
 
-        data_config = LeRobotDatasetMetadata("lerobot/pusht")
+        data_config = LeRobotDatasetMetadata(cfg.id)
         self.train_episodes = None
         self.val_episodes = None
         self.dataset_class = CogBotsDataset
@@ -218,15 +271,37 @@ class DatasetModule(pl.LightningDataModule):
         self.action_std = (data_config.stats["action"]["std"] * 2) / (data_config.stats["action"]["max"] - data_config.stats["action"]["min"])
 
     def setup(self, stage: str) -> None:
-
-        dataset = CogBotsDataset(
+        # Create train dataset
+        train_episodes_list = list(self.cfg.train_episodes) if self.cfg.train_episodes is not None else None
+        train_dataset = CogBotsDataset(
             self.cfg,
+            train=True,
+        )
+        # Note: LeRobotDataset supports episodes parameter, but we need to pass it to parent __init__
+        # For now, we'll create the dataset and filter later if needed
+
+        # Create val dataset
+        val_episodes_list = list(self.cfg.val_episodes) if self.cfg.val_episodes is not None else None
+        val_dataset = CogBotsDataset(
+            self.cfg,
+            train=False,
         )
 
-        self.train_data, self.val_data = torch.utils.data.random_split(
-            dataset,
-            [len(dataset)-self.cfg.batch_size, self.cfg.batch_size],
-        )
+        # Split dataset if train_episodes/val_episodes are not specified
+        if self.cfg.train_episodes is None and self.cfg.val_episodes is None:
+            self.train_data, self.val_data = torch.utils.data.random_split(
+                train_dataset,
+                [len(train_dataset)-self.cfg.batch_size, self.cfg.batch_size],
+            )
+        else:
+            # Use separate datasets for train and val
+            self.train_data = train_dataset
+            self.val_data = val_dataset
+
+        # Set train_episodes and val_episodes for eval.py compatibility
+        # These should be the dataset objects themselves (CogBotsDataset instances)
+        self.train_episodes = self.train_data
+        self.val_episodes = self.val_data
 
 
 

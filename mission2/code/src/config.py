@@ -57,6 +57,8 @@ class DatasetConfig:
     policy_length: int = 32
     obs_length: int = 1
     max_goal_far: int = 0
+    train_episodes: Optional[Tuple[int, ...]] = None
+    val_episodes: Optional[Tuple[int, ...]] = None
 
     def __post_init__(self):
         if isinstance(self.adjusting_methods, list) or isinstance(self.adjusting_methods, ListConfig):

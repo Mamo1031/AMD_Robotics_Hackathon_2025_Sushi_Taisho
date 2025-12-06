@@ -5,7 +5,8 @@ import numpy as np
 import ml_networks as ml
 
 from .config import TransformerConfig, PosEmbConfig, DiTConfig
-from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
+from timm.models.vision_transformer import Attention, Mlp
+from typing import Optional
 
 
 class TransformerPolicy(nn.Module):
@@ -97,7 +98,7 @@ class TransformerPolicy(nn.Module):
 
         # decoder head
         self.ln_f = nn.LayerNorm(cfg.d_model)
-        self.head = nn.Linear(cfg.d_model, input_dim)
+        self.head = nn.Linear(cfg.d_model, cfg.input_dim)
             
         # constants
         self.T = T
@@ -287,6 +288,27 @@ class FinalLayer(nn.Module):
         x = self.linear(x)
         return x
 
+def sinusoidal_positional_encoding(
+    L: int,
+    d_model: int,
+    base: float = 10_000.0,
+) -> torch.Tensor:
+    """
+    Returns: (L, d_model) tensor of sinusoidal positional encodings.
+    """
+    device = torch.device("cpu")
+    dtype = torch.get_default_dtype()
+
+    position = torch.arange(L, device=device, dtype=dtype).unsqueeze(1)              # (L, 1)
+    div_term = torch.exp(
+        torch.arange(0, d_model, 2, device=device, dtype=dtype) *
+        (-np.log(base) / d_model)
+    )                                                                                # (d_model/2,)
+
+    pe = torch.zeros(L, d_model, device=device, dtype=dtype)                         # (L, d_model)
+    pe[:, 0::2] = torch.sin(position * div_term)                                     # even dims
+    pe[:, 1::2] = torch.cos(position * div_term)                                     # odd dims
+    return pe.unsqueeze(0)  # (1, L, d_model)
 
 class DiT(nn.Module):
     """
@@ -353,10 +375,6 @@ class DiT(nn.Module):
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
         nn.init.constant_(self.input_emb.bias, 0)
 
-
-        # Initialize timestep embedding MLP:
-        nn.init.normal_(self.time_encoder.dense[0].linear.weight,std=0.02)
-        nn.init.normal_(self.time_encoder.dense[1].linear.weight,std=0.02)
 
         # Zero-out adaLN modulation layers in DiT blocks:
         for block in self.blocks:
