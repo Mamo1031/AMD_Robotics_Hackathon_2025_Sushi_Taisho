@@ -27,9 +27,7 @@ from lerobot.processor import (
     RobotAction,
     make_default_processors,
 )
-from lerobot.configs.parser import get_cli_overrides
 from lerobot.robots import RobotConfig, make_robot_from_config
-from lerobot.robots.so100_follower.config_so100_follower import SO100FollowerConfig
 from lerobot.utils.constants import OBS_IMAGES, OBS_STATE, OBS_STR
 from lerobot.utils.robot_utils import precise_sleep
 from ml_networks import torch_fix_seed
@@ -42,6 +40,7 @@ from mission2 import (
     StreamingFlowMatchingConfig,
     StreamingPolicy,
     joint_transform,
+    joint_detransform,
     visualize_attention_video,
 )
 
@@ -366,6 +365,14 @@ def evaluation(
 
         action = action_chunk[step % inference_every]
         action_buffer.append(action.clone().detach())
+        action = action.detach().clone().clamp(-1.0, 1.0)
+
+        action = joint_detransform(
+            action.unsqueeze(0),
+            data_config.stats["action"]["max"],
+            data_config.stats["action"]["min"],
+        ).squeeze(0)
+
 
         # Convert action to RobotAction format (following main() pattern)
         # make_robot_action expects a tensor, so we pass the action tensor directly
