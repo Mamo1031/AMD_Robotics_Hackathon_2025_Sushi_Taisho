@@ -12,10 +12,12 @@ import logging
 import os
 import time
 from pathlib import Path
+import tempfile
 
 import numpy
 import torch
 from hydra.utils import instantiate
+import wandb
 from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
 from lerobot.datasets.utils import build_dataset_frame
 from lerobot.policies.utils import make_robot_action
@@ -91,10 +93,76 @@ def evaluation(
 
     inference_every = min(inference_every, config.policy.policy_length)
 
-    if load_last:
-        param = torch.load(f"{path}/last.ckpt", map_location="cpu")["state_dict"]
-    else:
-        param = torch.load(f"{path}/model.ckpt", map_location="cpu")["state_dict"]
+    # wandbからモデルを読み込むか、ローカルから読み込む
+    param = None
+    if config.run_path is not None:
+        try:
+            # wandbからモデルを読み込む
+            print(f"Attempting to load model from wandb run_path: {config.run_path}")
+            api = wandb.Api()
+            run = api.run(config.run_path)
+            
+            # artifactを検索（最新のmodel artifactを取得）
+            artifacts = list(run.logged_artifacts())
+            model_artifact = None
+            for artifact in artifacts:
+                if artifact.type == "model":
+                    model_artifact = artifact
+                    # 最新のartifactを使用（通常は最後にログされたもの）
+                    break
+            
+            # 見つからない場合は、artifact名で検索
+            if model_artifact is None:
+                # artifact名のパターンで検索（train.pyで保存した形式: model-{run_id}）
+                artifact_name_pattern = f"model-{run.id}"
+                try:
+                    # entity/project/artifact_name:version の形式で取得
+                    entity, project, run_id = config.run_path.split("/")
+                    artifact_name = f"{entity}/{project}/{artifact_name_pattern}:latest"
+                    model_artifact = api.artifact(artifact_name)
+                except Exception:
+                    pass
+            
+            if model_artifact is not None:
+                # artifactをダウンロード
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    artifact_dir = model_artifact.download(root=tmpdir)
+                    artifact_path = Path(artifact_dir)
+                    
+                    # モデルファイルを探す
+                    if load_last:
+                        model_file = artifact_path / "last.ckpt"
+                    else:
+                        model_file = artifact_path / "model.ckpt"
+                    
+                    if model_file.exists():
+                        param = torch.load(str(model_file), map_location="cpu")["state_dict"]
+                        print(f"Successfully loaded model from wandb: {model_file}")
+                    else:
+                        print(f"Warning: Model file not found in artifact: {model_file}")
+            else:
+                print("Warning: No model artifact found in wandb run")
+        except Exception as e:
+            print(f"Warning: Failed to load model from wandb: {e}")
+            import traceback
+            traceback.print_exc()
+            print("Falling back to local model")
+    
+    # wandbからの読み込みに失敗した場合、ローカルから読み込む
+    if param is None:
+        if load_last:
+            param_path = f"{path}/last.ckpt"
+        else:
+            param_path = f"{path}/model.ckpt"
+        
+        if os.path.exists(param_path):
+            param = torch.load(param_path, map_location="cpu")["state_dict"]
+            print(f"Loaded model from local path: {param_path}")
+        else:
+            raise FileNotFoundError(
+                f"Model file not found at {param_path}. "
+                f"Please ensure the model has been trained or provide a valid run_path in config."
+            )
 
     model.load_state_dict(param)
     for name, param in model.named_parameters():
@@ -126,6 +194,14 @@ def evaluation(
     rewards = []
     frames = []
 
+    # Get obs_length from config (same as dataset)
+    obs_length = config.datamodule.obs_length
+
+    # Initialize image and state sequence buffers (FIFO queue)
+    # These will maintain obs_length frames of history
+    image_sequence_buffer = []
+    state_sequence_buffer = []
+
     # Get initial observation from robot
     obs = robot.get_observation()
     obs_processed = robot_observation_processor(obs)
@@ -147,73 +223,13 @@ def evaluation(
     # Use the first image key
     image_key = image_keys[0]
 
-    # Prepare initial state and image for the policy
-    state_np = observation_frame[OBS_STATE]
-    if isinstance(state_np, torch.Tensor):
-        state_np = state_np.cpu().numpy()
-    state = torch.from_numpy(state_np).float()
-
-    image_np = observation_frame[image_key]
-    if isinstance(image_np, torch.Tensor):
-        image_np = image_np.cpu().numpy()
-    # Convert image from (C, H, W) to (H, W, C) if needed, then back to (C, H, W)
-    if len(image_np.shape) == 3 and image_np.shape[0] == 3:
-        # Already in (C, H, W) format
-        image = torch.from_numpy(image_np).float()
-    else:
-        # Assume (H, W, C) format
-        image = torch.from_numpy(image_np).float()
-        if len(image.shape) == 3:
-            image = image.permute(2, 0, 1)
-
-    # Normalize image to [0, 1] if it's in [0, 255]
-    if image.max() > 1.0:
-        image = image / 255.0
-
-    # Add batch dimension
-    state = state.unsqueeze(0)
-    image = image.unsqueeze(0)
-
-    # Transform state using joint_transform
-    state = joint_transform(
-        state,
-        data_config.stats["observation.state"]["max"],
-        data_config.stats["observation.state"]["min"],
-    )
-
-    # Initialize action from current state (as initial action)
-    action = state.clone()
-
-    step = 0
-    done = False
-
-    fps = 30  # Default FPS for timing control
-
-    for t in track(range(max_steps)):
-        start_loop_t = time.perf_counter()
-
-        # Get robot observation (following main() pattern)
-        obs = robot.get_observation()
-
-        # Applies a pipeline to the raw robot observation, default is IdentityProcessor
-        obs_processed = robot_observation_processor(obs)
-
-        # Build dataset frame (following main() pattern)
-        observation_frame = build_dataset_frame(dataset_features, obs_processed, prefix=OBS_STR)
-
-        # Extract state and image from observation frame
+    # Helper function to process a single observation
+    def process_observation(observation_frame):
+        """Process a single observation frame and return image and state tensors."""
         state_np = observation_frame[OBS_STATE]
         if isinstance(state_np, torch.Tensor):
             state_np = state_np.cpu().numpy()
         state = torch.from_numpy(state_np).float()
-
-        # Get the first image key (assuming there's at least one camera)
-        image_keys = [k for k in observation_frame.keys() if k.startswith(OBS_IMAGES + ".")]
-        if not image_keys:
-            raise ValueError(
-                f"No image keys found in observation frame. Available keys: {list(observation_frame.keys())}"
-            )
-        image_key = image_keys[0]
 
         image_np = observation_frame[image_key]
         if isinstance(image_np, torch.Tensor):
@@ -232,17 +248,85 @@ def evaluation(
         if image.max() > 1.0:
             image = image / 255.0
 
-        # Add extra (empty) batch dimension, required to forward the policy
-        state = state.unsqueeze(0)
-        state = joint_transform(
-            state,
+        return image, state
+
+    # Initialize the sequence buffers with the first observation (repeat it obs_length times)
+    image, state = process_observation(observation_frame)
+    for _ in range(obs_length):
+        image_sequence_buffer.append(image.clone())
+        state_sequence_buffer.append(state.clone())
+
+    # Transform state sequence using joint_transform (same as dataset)
+    # Stack states: (obs_length, state_dim)
+    state_sequence = torch.stack(state_sequence_buffer, dim=0)
+    state_sequence = joint_transform(
+        state_sequence,
+        data_config.stats["observation.state"]["max"],
+        data_config.stats["observation.state"]["min"],
+    )
+
+    # Stack images: (obs_length, C, H, W)
+    image_sequence = torch.stack(image_sequence_buffer, dim=0)
+
+    # Add batch dimension to match dataset format: (1, obs_length, C, H, W) and (1, obs_length, state_dim)
+    image_sequence = image_sequence.unsqueeze(0)  # (1, obs_length, C, H, W)
+    state_sequence = state_sequence.unsqueeze(0)  # (1, obs_length, state_dim)
+
+    # Encode the sequences (same as dataset)
+    obs_embed = model.encoder(image_sequence)  # (1, obs_length, embed_dim)
+    pos_embed = model.pos_encoder(state_sequence)  # (1, obs_length, embed_dim)
+
+    # Initialize action from current state (as initial action)
+    # Use the last state in the sequence: state_sequence is (1, obs_length, state_dim)
+    action = state_sequence[0, -1].clone()  # (state_dim,)
+
+    step = 0
+    done = False
+
+    fps = 30  # Default FPS for timing control
+
+    for t in track(range(max_steps)):
+        start_loop_t = time.perf_counter()
+
+        # Get robot observation (following main() pattern)
+        obs = robot.get_observation()
+
+        # Applies a pipeline to the raw robot observation, default is IdentityProcessor
+        obs_processed = robot_observation_processor(obs)
+
+        # Build dataset frame (following main() pattern)
+        observation_frame = build_dataset_frame(dataset_features, obs_processed, prefix=OBS_STR)
+
+        # Process the new observation
+        image, state = process_observation(observation_frame)
+
+        # Update sequence buffers (FIFO queue)
+        # Remove the oldest observation and add the new one
+        image_sequence_buffer.pop(0)
+        image_sequence_buffer.append(image.clone())
+        state_sequence_buffer.pop(0)
+        state_sequence_buffer.append(state.clone())
+
+        # Stack sequences to match dataset format
+        # Stack states: (obs_length, state_dim)
+        state_sequence = torch.stack(state_sequence_buffer, dim=0)
+        state_sequence = joint_transform(
+            state_sequence,
             data_config.stats["observation.state"]["max"],
             data_config.stats["observation.state"]["min"],
         )
-        image = image.unsqueeze(0)
 
-        obs_embed = model.encoder(image)
-        pos_embed = model.pos_encoder(state)
+        # Stack images: (obs_length, C, H, W)
+        image_sequence = torch.stack(image_sequence_buffer, dim=0)
+
+        # Add batch dimension to match dataset format: (1, obs_length, C, H, W) and (1, obs_length, state_dim)
+        image_sequence = image_sequence.unsqueeze(0)  # (1, obs_length, C, H, W)
+        state_sequence = state_sequence.unsqueeze(0)  # (1, obs_length, state_dim)
+
+        # Encode the sequences (same as dataset)
+        obs_embed = model.encoder(image_sequence)  # (1, obs_length, embed_dim)
+        pos_embed = model.pos_encoder(state_sequence)  # (1, obs_length, embed_dim)
+
         attentions.append(obs_embed)
         if step % inference_every == 0:
             action_chunk = model.inference(
@@ -312,37 +396,6 @@ def evaluation(
         attentions[None, ...],
         save_path=output_directory,
     )
-
-
-def parse_robot_config_from_cli() -> RobotConfig | None:
-    """
-    Parse robot config from CLI arguments using the same method as lerobot_record.py.
-    
-    This function uses get_cli_overrides("robot") to extract --robot.* arguments
-    and parses them using draccus, similar to how @parser.wrap() works in lerobot_record.py.
-    
-    Returns:
-        RobotConfig instance if --robot.* arguments are provided, None otherwise.
-        
-    Example CLI usage:
-        --robot.type=so101_follower --robot.port=/dev/ttyACM1 --robot.id=my_robot
-    """
-    import draccus
-    
-    try:
-        cli_overrides = get_cli_overrides("robot")
-        if cli_overrides:
-            robot_config = draccus.parse(config_class=RobotConfig, args=cli_overrides)
-            logging.info(f"robot_config parsed from CLI: {robot_config}")
-            return robot_config
-        else:
-            return None
-    except Exception as e:
-        logging.warning(
-            f"Failed to parse robot config from CLI using --robot.* arguments: {e}. "
-            "You can provide robot config via --robot-config file or individual --robot-* arguments."
-        )
-        return None
 
 
 if __name__ == "__main__":

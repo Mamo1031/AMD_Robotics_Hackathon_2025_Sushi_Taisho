@@ -230,6 +230,7 @@ class ExperimentConfig:
     trainer: TrainerConfig
     policy: PolicyConfig
     callbacks: Sequence[Callback] = field(default_factory=list)
+    run_path: Optional[str] = None  # wandb run path (entity/project/run_id)
 
     def __post_init__(self):
         self.obs_shape = tuple(self.obs_shape)

@@ -9,17 +9,22 @@ import argparse
 import os
 import warnings
 import torch
+import signal
+import sys
 from dataclasses import asdict
 from typing import Optional, List
+from pathlib import Path
 
 import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
+import wandb
 from mission2 import DatasetModule
 from mission2 import Policy, StreamingPolicy
 from mission2 import ExperimentConfig, TrainerConfig, StreamingFlowMatchingConfig
+from mission2 import WandbModelCheckpoint
 from ml_networks import torch_fix_seed
 from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
 import logging
@@ -60,27 +65,27 @@ def main(
 
     conf_path = f"models/cfg/{model_name}.yaml"
 
-    config = OmegaConf.load(conf_path)
-    config.seed = seed
-    config.epochs = epochs
-    config.device = device
-    config.datamodule.id = dataset
+    config_dict = OmegaConf.load(conf_path)
+    config_dict.seed = seed
+    config_dict.epochs = epochs
+    config_dict.device = device
+    config_dict.datamodule.id = dataset
 
-    data_config = LeRobotDatasetMetadata(config.datamodule.id)
-    config.action_dim = data_config.features["action"]["shape"][0]
+    data_config = LeRobotDatasetMetadata(config_dict.datamodule.id)
+    config_dict.action_dim = data_config.features["action"]["shape"][0]
     print(data_config.features.keys())
     print(data_config.features["task_index"])
-    config.obs_shape = list(data_config.features["observation.images.main"]["shape"])[::-1]
-    print(config.obs_shape)
-    config.datamodule.adjusting_methods = adjusting_methods
+    config_dict.obs_shape = list(data_config.features["observation.images.main"]["shape"])[::-1]
+    print(config_dict.obs_shape)
+    config_dict.datamodule.adjusting_methods = adjusting_methods
 
 
-    torch_fix_seed(config.seed)
+    torch_fix_seed(config_dict.seed)
 
 
-    OmegaConf.resolve(config)
+    OmegaConf.resolve(config_dict)
     config: ExperimentConfig = instantiate(
-        config,
+        config_dict,
     )
 
     callbacks = config.callbacks
@@ -124,7 +129,10 @@ def main(
         path=path,
         callbacks=callbacks,
         logger=logger,
-        early_stop=config.policy.loss_cfg.get("early_stop", 0)
+        early_stop=config.policy.loss_cfg.get("early_stop", 0),
+        config=config,
+        config_dict=config_dict,
+        conf_path=conf_path,
     )
 
 def train(
@@ -136,16 +144,55 @@ def train(
         callbacks: list,
         logger: WandbLogger,
         early_stop: int = 0,
+        config: Optional[ExperimentConfig] = None,
+        config_dict: Optional[OmegaConf] = None,
+        conf_path: Optional[str] = None,
         ):
+    
+    # シグナルハンドラ用の変数を準備
+    save_model_ref = [None]  # リストとして保持（後で更新可能にするため）
+    
+    # シグナルハンドラを設定して、KeyboardInterrupt時にもconfigを保存
+    def signal_handler(sig, frame):
+        print("\nInterrupt received, saving config and uploading model to wandb...")
+        try:
+            # コールバック経由でwandbにアップロードを試みる
+            if save_model_ref[0] is not None:
+                # trainerが存在する場合、コールバックのメソッドを直接呼ぶ
+                # ただし、trainerはまだ作成されていない可能性があるため、安全に処理
+                pass
+            
+            # configを保存
+            if config is not None and config_dict is not None and conf_path is not None:
+                try:
+                    if logger.experiment is not None:
+                        run_path = logger.experiment.path
+                        config.run_path = run_path
+                        config_dict.run_path = run_path
+                        OmegaConf.save(config_dict, conf_path)
+                        print(f"Config saved with run_path: {run_path}")
+                except Exception as e:
+                    print(f"Warning: Failed to save config on interrupt: {e}")
+        except Exception as e:
+            print(f"Warning: Error in signal handler: {e}")
+        finally:
+            sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
-
-    save_model = ModelCheckpoint(
+    save_model = WandbModelCheckpoint(
+        config=config,
+        config_dict=config_dict,
+        conf_path=conf_path,
         dirpath=path,
         filename="model",
         monitor=f"loss/val",
         save_on_train_epoch_end=False,
         save_last=True,
     )
+    
+    save_model_ref[0] = save_model  # シグナルハンドラからアクセス可能にする
 
     callbacks.append(save_model)
     if early_stop > 0:
@@ -166,6 +213,14 @@ def train(
     )
 
     trainer.fit(model=model, datamodule=datamodule)
+    
+    # コールバック内で既にアップロードされているが、念のため再度確認
+    # （コールバックが呼ばれなかった場合のフォールバック）
+    try:
+        if not save_model._wandb_uploaded and trainer.logger is not None:
+            save_model._upload_to_wandb(trainer)
+    except Exception as e:
+        print(f"Warning: Failed to upload to wandb after training: {e}")
 
 
 if __name__ == "__main__":
