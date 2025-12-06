@@ -74,7 +74,7 @@ class CondWrapper(nn.Module):
     def __init__(
             self, 
             model: Union[ml.ConditionalUnet1d, TransformerPolicy, DiT],
-            condition: Optional[torch.Tensor] = None
+            condition: torch.Tensor
         ):
         super().__init__()
         self.model = model
@@ -87,15 +87,18 @@ class CondWrapper(nn.Module):
             *args,
             **kwargs
         ):
+
+
         
-        return self.model.forward(t=t, x=x, cond=self.condition)
+        return self.model.forward(x, cond=self.condition)
 
 class PolicyBase(pl.LightningModule):
-    def __init__(self, cfg: PolicyConfig):
+    def __init__(self, n_task: int, cfg: PolicyConfig):
         super().__init__()
         self.register_buffer("noise_mean", torch.zeros(1, cfg.policy_length, cfg.action_dim))
         self.register_buffer("noise_std", torch.ones(1, cfg.policy_length, cfg.action_dim))
 
+        print("n_task", n_task)
 
         self.time_emb = SinusoidalPosEmb(
                 cfg.time_emb.vector, cfg.time_emb.scale
@@ -124,6 +127,16 @@ class PolicyBase(pl.LightningModule):
                 cfg.action_dim, 
                 cfg.obs_dim,
                 cfg.pos_encoder
+            )
+
+        if cfg.goal_conditioned:
+            self.goal_encoder = nn.Sequential(
+                nn.Embedding(n_task[0], cfg.obs_dim),
+                ml.MLPLayer(
+                    cfg.obs_dim, 
+                    cfg.obs_dim,
+                    cfg.goal_encoder
+                )
             )
         self.framework_cfg = cfg.framework_cfg
         self.framework, self.is_fm = get_framework(cfg.framework_cfg)
@@ -163,7 +176,7 @@ class PolicyBase(pl.LightningModule):
         else:
             pos_emb = None
         if self.cfg.goal_conditioned and not self.cfg.pos_only:
-            goal_emb = self.encoder(goal[:4])
+            goal_emb = self.goal_encoder(goal[:4]).unsqueeze(-2)
         else:
             goal_emb = None
         samples = []
@@ -211,8 +224,8 @@ class PolicyBase(pl.LightningModule):
         raise NotImplementedError("Shared step method must be implemented in subclasses")
 
 class Policy(PolicyBase):
-    def __init__(self, cfg: PolicyConfig):
-        super().__init__(cfg)
+    def __init__(self, n_task: int, cfg: PolicyConfig):
+        super().__init__(n_task, cfg)
 
         cond_step = cfg.n_obs_steps
 
@@ -367,7 +380,7 @@ class Policy(PolicyBase):
         else:
             cond = torch.cat([obs_emb, pos_emb], dim=-2)
         if self.cfg.goal_conditioned:
-            goal_emb = self.encoder(goal)
+            goal_emb = self.goal_encoder(goal).unsqueeze(-2)
             cond = torch.cat([cond, goal_emb], dim=-2)
 
         if cond.shape[1] == 0:
@@ -522,6 +535,7 @@ class StreamingPolicy(PolicyBase):
             cond = torch.cat([obs_emb, pos_emb], dim=-2)
         if self.cfg.goal_conditioned:
             goal_emb = self.encoder(goal)
+
             cond = torch.cat([cond, goal_emb], dim=-2)
 
         if cond.shape[1] == 0:

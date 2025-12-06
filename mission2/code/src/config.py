@@ -56,7 +56,6 @@ class DatasetConfig:
     fps: int = 10
     policy_length: int = 32
     obs_length: int = 1
-    max_goal_far: int = 0
     train_episodes: Optional[Tuple[int, ...]] = None
     val_episodes: Optional[Tuple[int, ...]] = None
 
@@ -169,8 +168,7 @@ class PolicyConfig:
     time_emb: Union[PosEmbConfig, ml.SoftmaxTransConfig] = None
     encoder: Optional[ml.EncoderConfig] = None
     pos_encoder: Optional[ml.MLPConfig] = None
-    goal_conditioned: bool = False
-    max_goal_far: int = 0
+    goal_encoder: Optional[ml.MLPConfig] = None
     policy_length: int = 32
     obs_length: int = 1
     use_uniform: bool = False
@@ -189,6 +187,10 @@ class PolicyConfig:
             self.obs_only = True
         else:
             self.obs_only = False
+        if self.goal_encoder is not None:
+            self.goal_conditioned = True
+        else:
+            self.goal_conditioned = False
 
     def dictcfg2dict(self) -> None:
         """Convert OmegaConf DictConfig to a dictionary."""
