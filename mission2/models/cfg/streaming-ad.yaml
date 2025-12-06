@@ -11,15 +11,19 @@ device: 0
 activation: Mish
 datamodule:
   _target_: mission2.DatasetConfig
-  batch_size: 16
+  batch_size: 64
   seed: 4
   action_noise: false
   id: Mamo1031/sushi_dynamic
   n_iterations: 10
   policy_length: 32
-  obs_length: 4
-  adjusting_methods: null
-  pred_obs_action: true
+  obs_length: 2
+  adjusting_methods:
+  - brightness
+  - contrast
+  - gamma
+  - sharpness
+  pred_obs_action: false
 policy:
   _target_: mission2.PolicyConfig
   obs_shape:
@@ -29,8 +33,8 @@ policy:
   obs_dim: 128
   action_dim: 6
   policy_length: 32
-  n_obs_steps: 4
-  pred_obs_action: true
+  n_obs_steps: 2
+  pred_obs_action: false
   ema:
     decay: 0.999
     use_num_updates: true
@@ -44,7 +48,7 @@ policy:
     vector: 128
     sigma: 0.001
     min: 0.0
-    max: 1.0
+    max: 32.0
   cond_cfg:
     _target_: ml_networks.MLPConfig
     hidden_dim: 128
@@ -58,14 +62,6 @@ policy:
     hidden_dim: 256
     output_activation: Identity
     n_layers: 3
-    linear_cfg:
-      _target_: ml_networks.LinearConfig
-      activation: Mish
-  pos_encoder:
-    _target_: ml_networks.MLPConfig
-    hidden_dim: 128
-    output_activation: Identity
-    n_layers: 1
     linear_cfg:
       _target_: ml_networks.LinearConfig
       activation: Mish
@@ -88,19 +84,19 @@ policy:
       conv_cfgs:
       - _target_: ml_networks.ConvConfig
         kernel_size: 7
-        stride: 2
+        stride: 1
         padding: 0
-        activation: Mish
+        activation: ELU
       - _target_: ml_networks.ConvConfig
         kernel_size: 5
         stride: 2
         padding: 0
-        activation: Mish
+        activation: ELU
       - _target_: ml_networks.ConvConfig
         kernel_size: 3
         stride: 1
         padding: 0
-        activation: Mish
+        activation: ELU
     full_connection:
       _target_: ml_networks.SpatialSoftmaxConfig
       is_argmax: true
@@ -123,4 +119,4 @@ callbacks:
 - _target_: mission2.RichProgressBar
 - _target_: mission2.VisualizePrediction
   save_every_n_epoch: 1
-run_path: mamo1031-keio-jp/lerobot/6o5xe2ia
+run_path: mamo1031-keio-jp/lerobot/awo79xlg
