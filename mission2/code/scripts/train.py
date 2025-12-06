@@ -70,7 +70,7 @@ def main(
     config.action_dim = data_config.features["action"]["shape"][0]
     print(data_config.features.keys())
     print(data_config.features["task_index"])
-    config.obs_shape = list(data_config.features["observation.images.wrist"]["shape"])[::-1]
+    config.obs_shape = list(data_config.features["observation.images.main"]["shape"])[::-1]
     print(config.obs_shape)
     config.datamodule.adjusting_methods = adjusting_methods
 
@@ -93,7 +93,7 @@ def main(
     name = f"{config.datamodule.id}_{model_name}_seed={config.seed}"
     logger = WandbLogger(
         name=name,
-        project="s3fmp",
+        project="lerobot",
         save_dir="./wandb/",
         config=config,
         tags=tags,
