@@ -38,7 +38,7 @@ policy:
     _target_: mission2.StreamingFlowMatchingConfig
     sigma_0: 0.05
     stabilization: 0.25
-    num_inference_steps: ${policy.policy_length}
+    num_inference_steps: 32
   time_emb:
     _target_: ml_networks.SoftmaxTransConfig
     vector: 128
@@ -123,4 +123,4 @@ callbacks:
 - _target_: mission2.RichProgressBar
 - _target_: mission2.VisualizePrediction
   save_every_n_epoch: 1
-run_path: mamo1031-keio-jp/lerobot/v0657sgr
+run_path: mamo1031-keio-jp/lerobot/f4hn5vz8
