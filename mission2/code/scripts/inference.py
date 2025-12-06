@@ -7,77 +7,52 @@ The actual inference logic will be implemented during the AMD Open Robotics Hack
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-
+import logging
 import os
 import time
-import numpy
-import torch
-
-from rich.progress import track
-from hydra.utils import instantiate
-from ml_networks import torch_fix_seed
-from typing import Optional, List
-from omegaconf import OmegaConf
-from mission2 import (ExperimentConfig, StreamingFlowMatchingConfig,
-                      visualize_attention_video, Policy, StreamingPolicy,
-                      joint_transform, joint_detransform)
-from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
-import logging
-import time
 from pathlib import Path
 
+import numpy
+import torch
+from hydra.utils import instantiate
 from lerobot.configs import parser
 from lerobot.configs.parser import get_cli_overrides
+from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
+from lerobot.datasets.utils import build_dataset_frame
 from lerobot.policies.utils import make_robot_action
 from lerobot.processor import (
     RobotAction,
     make_default_processors,
 )
-from lerobot.datasets.utils import build_dataset_frame
-from lerobot.utils.constants import ACTION, OBS_STR, OBS_STATE, OBS_IMAGES
+from lerobot.robots import RobotConfig, make_robot_from_config
+from lerobot.utils.constants import OBS_IMAGES, OBS_STATE, OBS_STR
 from lerobot.utils.robot_utils import precise_sleep
-from lerobot.robots import make_robot_from_config, RobotConfig
+from ml_networks import torch_fix_seed
+from omegaconf import OmegaConf
+from rich.progress import track
 
-
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for inference."""
-    parser = argparse.ArgumentParser(description="Run Sushi-Bot inference.")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=Path("config/inference_config.yaml"),
-        help="Path to inference config YAML file.",
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["grasp", "vla"],
-        default="grasp",
-        help='Inference mode: "grasp" for basic picking, "vla" for VLA-based control.',
-    )
-    parser.add_argument(
-        "--instruction",
-        type=str,
-        default=None,
-        help='Natural language instruction (used when mode="vla").',
-    )
-    return parser.parse_args()
-
+from mission2 import (
+    ExperimentConfig,
+    Policy,
+    StreamingFlowMatchingConfig,
+    StreamingPolicy,
+    joint_transform,
+    visualize_attention_video,
+)
 
 
 def evaluation(
-        model_name: str,
-        seed: int,
-        device: int,
-        dataset: str = "lerobot-rope",
-        adjusting_methods: Optional[List] = None,
-        load_last: bool = False,
-        inference_every: int = 16,
-        max_steps: int = 300,
-        n_candidates: int = 1,
-        robot_config: Optional[RobotConfig] = None,
-    ):
+    model_name: str,
+    seed: int,
+    device: int,
+    dataset: str,
+    adjusting_methods: list | None = None,
+    load_last: bool = False,
+    inference_every: int = 16,
+    max_steps: int = 300,
+    n_candidates: int = 1,
+    robot_config: RobotConfig | None = None,
+):
     """
     This script evaluates a pre-trained diffusion policy.
     It renders the environment and saves the frames of the evaluation as a video.
@@ -87,11 +62,11 @@ def evaluation(
     config = OmegaConf.load(conf_path)
     config.seed = seed
     config.device = device
-    config.datamodule.env = dataset
+    config.datamodule.ids = dataset
 
     data_config = LeRobotDatasetMetadata(config.datamodule.id)
     config.action_dim = data_config.features["action"]["shape"][0]
-    config.obs_shape = list(data_config.features["observation.image"]["shape"])[::-1]
+    config.obs_shape = list(data_config.features["observation.images.main"]["shape"])[::-1]
 
     torch_fix_seed(config.seed)
 
@@ -100,10 +75,10 @@ def evaluation(
         config,
     )
 
-    path = f"models/params/{config.datamodule.env}/{model_name}/seed:{config.seed}/"
+    path = f"models/params/{config.datamodule.ids}/{model_name}/seed:{config.seed}/"
     if adjusting_methods is not None:
         path += "_".join(adjusting_methods) + "/"
-    log_path = f"reports/{config.datamodule.env}/{model_name}/seed:{config.seed}"
+    log_path = f"reports/{config.datamodule.ids}/{model_name}/seed:{config.seed}"
     os.makedirs(log_path, exist_ok=True)
     os.makedirs(path, exist_ok=True)
     if isinstance(config.policy.framework_cfg, StreamingFlowMatchingConfig):
@@ -116,13 +91,9 @@ def evaluation(
     inference_every = min(inference_every, config.policy.policy_length)
 
     if load_last:
-        param = torch.load(
-                f"{path}/last.ckpt",
-                map_location="cpu")["state_dict"]
+        param = torch.load(f"{path}/last.ckpt", map_location="cpu")["state_dict"]
     else:
-        param = torch.load(
-                f"{path}/model.ckpt",
-                map_location="cpu")["state_dict"]
+        param = torch.load(f"{path}/model.ckpt", map_location="cpu")["state_dict"]
 
     model.load_state_dict(param)
     for name, param in model.named_parameters():
@@ -132,51 +103,55 @@ def evaluation(
     # Create a directory to store the video of the evaluation
     output_directory = Path(f"reports/{model_name}/seed:{seed}/")
     output_directory.mkdir(parents=True, exist_ok=True)
-    
+
     # Initialize processors (following lerobot_record.py pattern)
     _, robot_action_processor, robot_observation_processor = make_default_processors()
-    
+
     # Create dataset features for build_dataset_frame
     dataset_features = data_config.features
-    
+
     # Initialize robot (following lerobot_record.py pattern)
     if robot_config is None:
         raise ValueError(
             "Robot config is required for evaluation. "
             "Please provide robot_config argument or set it in the config file."
         )
-    
+
     robot = make_robot_from_config(robot_config)
     robot.connect()
-    
+
     # Initialize tracking variables
     attentions = []
     rewards = []
     frames = []
-    
+
     # Get initial observation from robot
     obs = robot.get_observation()
     obs_processed = robot_observation_processor(obs)
     observation_frame = build_dataset_frame(dataset_features, obs_processed, prefix=OBS_STR)
-    
+
     # Extract state and image from observation frame
     if OBS_STATE not in observation_frame:
-        raise ValueError(f"observation.state not found in observation frame. Available keys: {list(observation_frame.keys())}")
-    
+        raise ValueError(
+            f"observation.state not found in observation frame. Available keys: {list(observation_frame.keys())}"
+        )
+
     # Get the first image key (assuming there's at least one camera)
     image_keys = [k for k in observation_frame.keys() if k.startswith(OBS_IMAGES + ".")]
     if not image_keys:
-        raise ValueError(f"No image keys found in observation frame. Available keys: {list(observation_frame.keys())}")
-    
+        raise ValueError(
+            f"No image keys found in observation frame. Available keys: {list(observation_frame.keys())}"
+        )
+
     # Use the first image key
     image_key = image_keys[0]
-    
+
     # Prepare initial state and image for the policy
     state_np = observation_frame[OBS_STATE]
     if isinstance(state_np, torch.Tensor):
         state_np = state_np.cpu().numpy()
     state = torch.from_numpy(state_np).float()
-    
+
     image_np = observation_frame[image_key]
     if isinstance(image_np, torch.Tensor):
         image_np = image_np.cpu().numpy()
@@ -189,54 +164,56 @@ def evaluation(
         image = torch.from_numpy(image_np).float()
         if len(image.shape) == 3:
             image = image.permute(2, 0, 1)
-    
+
     # Normalize image to [0, 1] if it's in [0, 255]
     if image.max() > 1.0:
         image = image / 255.0
-    
+
     # Add batch dimension
     state = state.unsqueeze(0)
     image = image.unsqueeze(0)
-    
+
     # Transform state using joint_transform
     state = joint_transform(
         state,
         data_config.stats["observation.state"]["max"],
-        data_config.stats["observation.state"]["min"]
+        data_config.stats["observation.state"]["min"],
     )
-    
+
     # Initialize action from current state (as initial action)
     action = state.clone()
-    
+
     step = 0
     done = False
-    
+
     fps = 30  # Default FPS for timing control
-    
+
     for t in track(range(max_steps)):
         start_loop_t = time.perf_counter()
-        
+
         # Get robot observation (following main() pattern)
         obs = robot.get_observation()
-        
+
         # Applies a pipeline to the raw robot observation, default is IdentityProcessor
         obs_processed = robot_observation_processor(obs)
-        
+
         # Build dataset frame (following main() pattern)
         observation_frame = build_dataset_frame(dataset_features, obs_processed, prefix=OBS_STR)
-        
+
         # Extract state and image from observation frame
         state_np = observation_frame[OBS_STATE]
         if isinstance(state_np, torch.Tensor):
             state_np = state_np.cpu().numpy()
         state = torch.from_numpy(state_np).float()
-        
+
         # Get the first image key (assuming there's at least one camera)
         image_keys = [k for k in observation_frame.keys() if k.startswith(OBS_IMAGES + ".")]
         if not image_keys:
-            raise ValueError(f"No image keys found in observation frame. Available keys: {list(observation_frame.keys())}")
+            raise ValueError(
+                f"No image keys found in observation frame. Available keys: {list(observation_frame.keys())}"
+            )
         image_key = image_keys[0]
-        
+
         image_np = observation_frame[image_key]
         if isinstance(image_np, torch.Tensor):
             image_np = image_np.cpu().numpy()
@@ -249,40 +226,41 @@ def evaluation(
             image = torch.from_numpy(image_np).float()
             if len(image.shape) == 3:
                 image = image.permute(2, 0, 1)
-        
+
         # Normalize image to [0, 1] if it's in [0, 255]
         if image.max() > 1.0:
             image = image / 255.0
-    
+
         # Add extra (empty) batch dimension, required to forward the policy
         state = state.unsqueeze(0)
-        state = joint_transform(state, data_config.stats["observation.state"]["max"], data_config.stats["observation.state"]["min"])
+        state = joint_transform(
+            state,
+            data_config.stats["observation.state"]["max"],
+            data_config.stats["observation.state"]["min"],
+        )
         image = image.unsqueeze(0)
-    
+
         obs_embed = model.encoder(image)
         pos_embed = model.pos_encoder(state)
         attentions.append(obs_embed)
         if step % inference_every == 0:
             action_chunk = model.inference(
-                batch_size=n_candidates,
-                obs=obs_embed,
-                pos=pos_embed,
-                initial_action=action
+                batch_size=n_candidates, obs=obs_embed, pos=pos_embed, initial_action=action
             )
             action_chunk = action_chunk.mean(dim=0)
-    
+
         action = action_chunk[step % inference_every]
-        
+
         # Convert action to RobotAction format (following main() pattern)
         # make_robot_action expects a tensor, so we pass the action tensor directly
         act_processed_policy: RobotAction = make_robot_action(action, dataset_features)
-        
+
         # Applies a pipeline to the action (following main() pattern)
         robot_action_to_send = robot_action_processor((act_processed_policy, obs))
-        
+
         # Send action to robot (following lerobot_record.py pattern)
         _sent_action = robot.send_action(robot_action_to_send)
-        
+
         # Keep track of frames (extract from current observation)
         # Get image from observation_frame for visualization
         image_keys = [k for k in observation_frame.keys() if k.startswith(OBS_IMAGES + ".")]
@@ -296,28 +274,28 @@ def evaluation(
                 # (C, H, W) -> (H, W, C)
                 frame_np = frame_np.transpose(1, 2, 0)
             frames.append(frame_np.copy())
-        
+
         # Note: For real robot evaluation, we don't have rewards or termination signals
         # These would need to be determined by task-specific logic
         reward = 0.0  # Placeholder - should be determined by task-specific logic
         rewards.append(reward)
-    
+
         # The rollout is considered done when the maximum number of iterations is reached
         # For real robot evaluation, termination would need to be determined by task-specific logic
         step += 1
         if step >= max_steps:
             done = True
-        
+
         # Timing control (following main() pattern)
         dt_s = time.perf_counter() - start_loop_t
-        precise_sleep(1 / fps - dt_s)
-        
+        # precise_sleep(1 / fps - dt_s)
+        precise_sleep(1)
         if done:
             break
-    
+
     # Disconnect robot
     robot.disconnect()
-    
+
     print("Evaluation completed!")
 
     rewards = numpy.array(rewards)
@@ -336,77 +314,79 @@ def evaluation(
 
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] in ["--model", "-m", "--evaluate", "-e"]:
-        # Run evaluation mode
-        parser = argparse.ArgumentParser(description="Evaluate a pre-trained diffusion policy.")
-        parser.add_argument("--model", type=str, help="model name in models/", default="default")
-        parser.add_argument("--seed", type=int, default=0)
-        parser.add_argument("--device", type=int, default=0)
-        parser.add_argument("--dataset", type=str, default="lerobot-rope")
-        parser.add_argument("--load_last", action="store_true", help="load last model")
-        parser.add_argument("--inference_every", type=int, default=8, help="Number of steps between policy inferences")
-        parser.add_argument(
-            "--max-steps",
-            "-n",
-            type=int,
-            default=300,
-            help="number of episodes to evaluate",
-        )
-        parser.add_argument(
-            "--n_candidates",
-            "-nc",
-            type=int,
-            default=1,
-            help="number of candidates to sample from the model",
-        )
-        parser.add_argument(
-            "--adjusting_methods",
-            "-am",
-            type=str,
-            nargs="+",
-            default=None,
-            help="list of adjusting methods",
+    # Run evaluation mode
+    parser = argparse.ArgumentParser(description="Evaluate a pre-trained diffusion policy.")
+    parser.add_argument("--model", type=str, help="model name in models/", default="default")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--dataset", type=str)
+    parser.add_argument("--load_last", action="store_true", help="load last model")
+    parser.add_argument(
+        "--inference_every",
+        type=int,
+        default=8,
+        help="Number of steps between policy inferences",
+    )
+    parser.add_argument(
+        "--max-steps",
+        "-n",
+        type=int,
+        default=300,
+        help="number of episodes to evaluate",
+    )
+    parser.add_argument(
+        "--n_candidates",
+        "-nc",
+        type=int,
+        default=1,
+        help="number of candidates to sample from the model",
+    )
+    parser.add_argument(
+        "--adjusting_methods",
+        "-am",
+        type=str,
+        nargs="+",
+        default=None,
+        help="list of adjusting methods",
+    )
+
+    args = parser.parse_args()
+    print("=======================")
+    print(args.dataset)
+    print("=======================")
+
+    # Parse robot config from command line arguments
+    # Following lerobot_record.py pattern, robot config can be passed via CLI
+    # For example: --robot.type=so100_follower --robot.port=/dev/ttyUSB0
+    robot_config = None
+    try:
+        # Try to parse robot config from CLI arguments
+        cli_overrides = get_cli_overrides("robot")
+        if cli_overrides:
+            # Use draccus to parse robot config from CLI
+            import draccus
+
+            # Import robot config classes
+            from lerobot.robots import RobotConfig
+
+            # Parse robot config using draccus
+            robot_config = draccus.parse(config_class=RobotConfig, args=cli_overrides)
+    except Exception as e:
+        logging.warning(
+            f"Failed to parse robot config from CLI: {e}. Please provide robot config via --robot.* arguments."
         )
 
-        args = parser.parse_args()
-        
-        # Parse robot config from command line arguments
-        # Following lerobot_record.py pattern, robot config can be passed via CLI
-        # For example: --robot.type=so100_follower --robot.port=/dev/ttyUSB0
-        robot_config = None
-        try:
-            # Try to parse robot config from CLI arguments
-            cli_overrides = get_cli_overrides("robot")
-            if cli_overrides:
-                # Use draccus to parse robot config from CLI
-                import draccus
-                # Import robot config classes
-                from lerobot.robots import RobotConfig
-                # Parse robot config using draccus
-                robot_config = draccus.parse(
-                    config_class=RobotConfig,
-                    args=cli_overrides
-                )
-        except Exception as e:
-            logging.warning(f"Failed to parse robot config from CLI: {e}. Please provide robot config via --robot.* arguments.")
-        
-        evaluation(
-            model_name=args.model,
-            seed=args.seed,
-            device=args.device,
-            dataset=args.dataset,
-            adjusting_methods=args.adjusting_methods,
-            load_last=args.load_last,
-            inference_every=args.inference_every,
-            max_steps=args.max_steps,
-            n_candidates=args.n_candidates,
-            robot_config=robot_config,
-        )
-    else:
-        # Run main inference mode
-        def main():
-            """Main inference function - to be implemented."""
-            raise NotImplementedError("Main inference mode is not yet implemented.")
-        
-        main()
+    print("args.model", args.model)
+    print("args.dataset", args.dataset)
+    evaluation(
+        model_name=args.model,
+        seed=args.seed,
+        device=args.device,
+        dataset=args.dataset,
+        adjusting_methods=args.adjusting_methods,
+        load_last=args.load_last,
+        inference_every=args.inference_every,
+        max_steps=args.max_steps,
+        n_candidates=args.n_candidates,
+        robot_config=robot_config,
+    )
