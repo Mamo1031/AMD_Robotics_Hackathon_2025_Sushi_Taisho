@@ -1,80 +1,80 @@
 # Mission 2: Flow Matching Policy
 
-Mission 2では、Flow Matchingベースのポリシーを使用したロボット制御を実装しています。
+Mission 2 implements robot control using a Flow Matching-based policy.
 
-## 📋 概要
+## 📋 Overview
 
-Mission 2は、Diffusion Transformer (DiT) アーキテクチャとFlow Matchingフレームワークを使用したポリシー学習・推論システムです。以下の機能を提供します：
+Mission 2 is a policy learning and inference system using the Diffusion Transformer (DiT) architecture and Flow Matching framework. It provides the following features:
 
-- **Stable Flow Matching**: 安定したFlow Matchingによるポリシー学習
-- **Streaming Flow Matching**: ストリーミング対応のFlow Matching
-- **Transformer Policy**: Transformerベースのポリシーアーキテクチャ
-- **WandB統合**: 実験の追跡と可視化
+- **Stable Flow Matching**: Policy learning with stable Flow Matching
+- **Streaming Flow Matching**: Flow Matching with streaming support
+- **Transformer Policy**: Transformer-based policy architecture
+- **WandB Integration**: Experiment tracking and visualization
 
-## 📁 ディレクトリ構造
+## 📁 Directory Structure
 
 ```
 mission2/
-├── README.md                    # このファイル
-├── __init__.py                  # パッケージの公開API
+├── README.md                    # This file
+├── __init__.py                  # Package public API
 ├── code/
 │   ├── config/
-│   │   ├── training_config.yaml # トレーニング設定（プレースホルダー）
-│   │   └── inference_config.yaml# 推論設定（プレースホルダー）
+│   │   ├── training_config.yaml # Training configuration (placeholder)
+│   │   └── inference_config.yaml# Inference configuration (placeholder)
 │   ├── scripts/
-│   │   ├── train.py            # トレーニングスクリプト
-│   │   └── inference.py        # 推論・評価スクリプト
+│   │   ├── train.py            # Training script
+│   │   └── inference.py        # Inference and evaluation script
 │   └── src/
-│       ├── backbone.py         # DiT、TransformerPolicyなどのバックボーン
-│       ├── callbacks.py        # PyTorch Lightningコールバック
-│       ├── cli.py              # コマンドラインインターフェース
-│       ├── config.py          # 設定クラス
-│       ├── dataset.py         # データセット関連
-│       ├── eval.py            # 評価関数
-│       ├── fm.py              # Flow Matching実装
-│       ├── policy.py          # ポリシークラス
-│       └── utils.py           # ユーティリティ関数
+│       ├── backbone.py         # Backbones such as DiT, TransformerPolicy
+│       ├── callbacks.py        # PyTorch Lightning callbacks
+│       ├── cli.py              # Command-line interface
+│       ├── config.py          # Configuration classes
+│       ├── dataset.py         # Dataset-related code
+│       ├── eval.py            # Evaluation functions
+│       ├── fm.py              # Flow Matching implementation
+│       ├── policy.py          # Policy classes
+│       └── utils.py           # Utility functions
 ├── models/
-│   ├── cfg/                    # モデル設定ファイル（.yaml）
-│   └── params/                 # 学習済みモデルのパラメータ
-└── wandb/                      # WandBのログディレクトリ
+│   ├── cfg/                    # Model configuration files (.yaml)
+│   └── params/                 # Trained model parameters
+└── wandb/                      # WandB log directory
 ```
 
-## 🚀 セットアップ
+## 🚀 Setup
 
-### 前提条件
+### Prerequisites
 
 - Python 3.8+
 - PyTorch
 - PyTorch Lightning
 - LeRobot
-- その他の依存パッケージ（`pyproject.toml`を参照）
+- Other dependencies (see `pyproject.toml`)
 
-### インストール
+### Installation
 
-プロジェクトルートから以下のコマンドを実行：
+Run the following commands from the project root:
 
 ```bash
-# 仮想環境をアクティベート
+# Activate virtual environment
 source .venv/bin/activate  # Linux/Mac
-# または
+# or
 .venv\Scripts\activate     # Windows
 
-# 依存パッケージがインストールされていることを確認
+# Verify that dependencies are installed
 ```
 
-## 📊 データセット
+## 📊 Dataset
 
-デフォルトでは `lerobot-rope` データセットを使用します。他のデータセットを使用する場合は、`--dataset` オプションで指定できます。
+By default, the `lerobot-rope` dataset is used. To use other datasets, specify them with the `--dataset` option.
 
-## 🎓 モデルのトレーニング
+## 🎓 Model Training
 
-### 基本的な使用方法
+### Basic Usage
 
 ```bash
 cd mission2/code
 
-# 基本的なトレーニング実行
+# Basic training execution
 python scripts/train.py --train \
     --model <model_name> \
     --seed <seed> \
@@ -83,19 +83,19 @@ python scripts/train.py --train \
     --dataset <dataset_name>
 ```
 
-### 主要なオプション
+### Main Options
 
-- `--model` / `-m`: モデル名（`models/cfg/<model_name>.yaml` から設定を読み込み）
-- `--seed`: ランダムシード（デフォルト: 0）
-- `--device`: GPUデバイスID（デフォルト: 0）
-- `--epochs`: エポック数（デフォルト: 1000）
-- `--dataset`: データセット名（デフォルト: "lerobot-rope"）
-- `--adjusting_methods` / `-am`: 調整メソッドのリスト（オプション）
+- `--model` / `-m`: Model name (loads configuration from `models/cfg/<model_name>.yaml`)
+- `--seed`: Random seed (default: 0)
+- `--device`: GPU device ID (default: 0)
+- `--epochs`: Number of epochs (default: 1000)
+- `--dataset`: Dataset name (default: "lerobot-rope")
+- `--adjusting_methods` / `-am`: List of adjustment methods (optional)
 
-### 実行例
+### Examples
 
 ```bash
-# シード4でトレーニング
+# Training with seed 4
 python scripts/train.py --train \
     --model unet \
     --seed 4 \
@@ -103,7 +103,7 @@ python scripts/train.py --train \
     --epochs 1000 \
     --dataset lerobot-rope
 
-# 調整メソッドを指定してトレーニング
+# Training with adjustment methods specified
 python scripts/train.py --train \
     --model unet \
     --seed 4 \
@@ -111,32 +111,32 @@ python scripts/train.py --train \
     --adjusting_methods method1 method2
 ```
 
-### モデル設定ファイル
+### Model Configuration Files
 
-モデル設定は `models/cfg/<model_name>.yaml` に配置します。このファイルには以下の設定が含まれます：
+Model configurations are placed in `models/cfg/<model_name>.yaml`. This file contains the following settings:
 
-- ポリシー設定（PolicyConfig）
-- Flow Matching設定（StableFlowMatchingConfig / StreamingFlowMatchingConfig）
-- データセット設定（DatasetConfig）
-- トレーナー設定（TrainerConfig）
+- Policy configuration (PolicyConfig)
+- Flow Matching configuration (StableFlowMatchingConfig / StreamingFlowMatchingConfig)
+- Dataset configuration (DatasetConfig)
+- Trainer configuration (TrainerConfig)
 
-### 出力
+### Output
 
-トレーニング中に以下が生成されます：
+The following are generated during training:
 
-- **モデルチェックポイント**: `models/params/<dataset>/<model_name>/seed:<seed>/`
-  - `model.ckpt`: 最良のバリデーション損失のモデル
-  - `last.ckpt`: 最後のエポックのモデル
-- **WandBログ**: `wandb/` ディレクトリに保存され、WandBダッシュボードで可視化可能
+- **Model checkpoints**: `models/params/<dataset>/<model_name>/seed:<seed>/`
+  - `model.ckpt`: Model with best validation loss
+  - `last.ckpt`: Model from the last epoch
+- **WandB logs**: Saved in the `wandb/` directory and can be visualized in the WandB dashboard
 
-## 🔍 推論・評価
+## 🔍 Inference and Evaluation
 
-### 評価モード
+### Evaluation Mode
 
 ```bash
 cd mission2/code
 
-# 基本的な評価実行
+# Basic evaluation execution
 python scripts/inference.py --evaluate \
     --model <model_name> \
     --seed <seed> \
@@ -144,21 +144,21 @@ python scripts/inference.py --evaluate \
     --dataset <dataset_name>
 ```
 
-### 主要なオプション
+### Main Options
 
-- `--model` / `-m`: モデル名
-- `--seed`: ランダムシード（デフォルト: 0）
-- `--device`: GPUデバイスID（デフォルト: 0）
-- `--dataset`: データセット名（デフォルト: "lerobot-rope"）
-- `--load_last`: 最後のチェックポイントを読み込む（デフォルト: `model.ckpt`を使用）
-- `--inference_every`: ポリシー推論の実行間隔（デフォルト: 8）
-- `--max-steps` / `-n`: 最大ステップ数（デフォルト: 300）
-- `--n_candidates` / `-nc`: サンプリングする候補数（デフォルト: 1）
-- `--adjusting_methods` / `-am`: 調整メソッドのリスト（オプション）
+- `--model` / `-m`: Model name
+- `--seed`: Random seed (default: 0)
+- `--device`: GPU device ID (default: 0)
+- `--dataset`: Dataset name (default: "lerobot-rope")
+- `--load_last`: Load the last checkpoint (default: uses `model.ckpt`)
+- `--inference_every`: Interval for policy inference execution (default: 8)
+- `--max-steps` / `-n`: Maximum number of steps (default: 300)
+- `--n_candidates` / `-nc`: Number of candidates to sample (default: 1)
+- `--adjusting_methods` / `-am`: List of adjustment methods (optional)
 
-### ロボット設定
+### Robot Configuration
 
-実機ロボットで評価する場合、ロボット設定をコマンドライン引数で指定します：
+When evaluating on a real robot, specify the robot configuration via command-line arguments:
 
 ```bash
 python scripts/inference.py --evaluate \
@@ -170,10 +170,10 @@ python scripts/inference.py --evaluate \
     --robot.port=/dev/ttyUSB0
 ```
 
-### 実行例
+### Examples
 
 ```bash
-# 基本的な評価
+# Basic evaluation
 python scripts/inference.py --evaluate \
     --model unet \
     --seed 4 \
@@ -182,14 +182,14 @@ python scripts/inference.py --evaluate \
     --max-steps 300 \
     --inference_every 16
 
-# 最後のチェックポイントを使用
+# Using the last checkpoint
 python scripts/inference.py --evaluate \
     --model unet \
     --seed 4 \
     --device 0 \
     --load_last
 
-# 複数の候補をサンプリング
+# Sampling multiple candidates
 python scripts/inference.py --evaluate \
     --model unet \
     --seed 4 \
@@ -197,49 +197,49 @@ python scripts/inference.py --evaluate \
     --n_candidates 5
 ```
 
-### 出力
+### Output
 
-評価実行により以下が生成されます：
+The following are generated by evaluation execution:
 
-- **可視化動画**: `reports/<model_name>/seed:<seed>/` に保存
-  - アテンション可視化を含む動画
-- **ログ**: コンソールに総報酬、フレーム数、アテンション形状などの情報が出力
+- **Visualization videos**: Saved in `reports/<model_name>/seed:<seed>/`
+  - Videos including attention visualization
+- **Logs**: Information such as total reward, number of frames, and attention shape is output to the console
 
-## 🔧 設定のカスタマイズ
+## 🔧 Configuration Customization
 
-### モデル設定ファイルの作成
+### Creating Model Configuration Files
 
-新しいモデル設定を作成するには、`models/cfg/` ディレクトリにYAMLファイルを配置します。設定ファイルの構造は `ExperimentConfig` クラスに基づいています。
+To create a new model configuration, place a YAML file in the `models/cfg/` directory. The configuration file structure is based on the `ExperimentConfig` class.
 
-### データセットの変更
+### Changing the Dataset
 
-異なるデータセットを使用するには：
+To use a different dataset:
 
-1. LeRobotデータセットの場合は、データセット名を `--dataset` オプションで指定
-2. カスタムデータセットの場合は、`DatasetModule` クラスを拡張
+1. For LeRobot datasets, specify the dataset name with the `--dataset` option
+2. For custom datasets, extend the `DatasetModule` class
 
-## 📚 APIリファレンス
+## 📚 API Reference
 
-### 主要なクラスと関数
+### Main Classes and Functions
 
-Mission 2パッケージから以下の主要なコンポーネントをインポートできます：
+The following main components can be imported from the Mission 2 package:
 
 ```python
 from mission2 import (
-    # バックボーン
+    # Backbones
     DiT, TransformerPolicy, SinusoidalPosEmb,
     
-    # ポリシー
+    # Policies
     Policy, StreamingPolicy, PolicyBase,
     
     # Flow Matching
     StableFlowMatcher, StreamingFlowMatcher,
     
-    # データセット
+    # Datasets
     CogBotsDataset, DatasetModule,
     joint_transform, joint_detransform,
     
-    # ユーティリティ
+    # Utilities
     visualize_attention,
     visualize_joint_prediction,
     visualize_attention_video,
@@ -249,35 +249,35 @@ from mission2 import (
 )
 ```
 
-詳細は `mission2/__init__.py` を参照してください。
+See `mission2/__init__.py` for details.
 
-## 🐛 トラブルシューティング
+## 🐛 Troubleshooting
 
-### よくある問題
+### Common Issues
 
-1. **モデル設定ファイルが見つからない**
-   - `models/cfg/<model_name>.yaml` が存在することを確認
+1. **Model configuration file not found**
+   - Verify that `models/cfg/<model_name>.yaml` exists
 
-2. **チェックポイントが見つからない**
-   - `models/params/<dataset>/<model_name>/seed:<seed>/` にチェックポイントが存在することを確認
-   - `--load_last` オプションを使用する場合は `last.ckpt` が存在することを確認
+2. **Checkpoint not found**
+   - Verify that checkpoints exist in `models/params/<dataset>/<model_name>/seed:<seed>/`
+   - If using the `--load_last` option, verify that `last.ckpt` exists
 
-3. **GPUメモリ不足**
-   - `--device` で異なるGPUを指定
-   - バッチサイズやモデルサイズを調整
+3. **GPU memory insufficient**
+   - Specify a different GPU with `--device`
+   - Adjust batch size or model size
 
-4. **データセットが見つからない**
-   - LeRobotデータセットが正しくインストールされていることを確認
-   - データセット名が正しいことを確認
+4. **Dataset not found**
+   - Verify that the LeRobot dataset is properly installed
+   - Verify that the dataset name is correct
 
-## 📝 注意事項
+## 📝 Notes
 
-- トレーニングと評価は `mission2/code/` ディレクトリから実行することを推奨
-- モデル設定ファイルのパスは相対パスで指定（`models/cfg/` からの相対パス）
-- WandBを使用する場合、適切に設定されていることを確認
+- It is recommended to run training and evaluation from the `mission2/code/` directory
+- Model configuration file paths are specified as relative paths (relative to `models/cfg/`)
+- When using WandB, verify that it is properly configured
 
-## 🔗 関連リンク
+## 🔗 Related Links
 
-- [プロジェクトREADME](../README.md)
+- [Project README](../README.md)
 - [LeRobot Documentation](https://github.com/huggingface/lerobot)
 
