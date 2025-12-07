@@ -7,18 +7,25 @@ The actual inference logic will be implemented during the AMD Open Robotics Hack
 from __future__ import annotations
 
 import argparse
+import json
 import logging
-import torch.nn.functional as F
 import os
-import time
-from pathlib import Path
+import queue
 import tempfile
-from typing import Literal
+import time
+import urllib.request
+import zipfile
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal
 
 import numpy
+import sounddevice
 import torch
-from hydra.utils import instantiate
+import torch.nn.functional as F
 import wandb
+from hydra.utils import instantiate
 from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
 from lerobot.datasets.utils import build_dataset_frame
 from lerobot.policies.utils import make_robot_action
@@ -32,16 +39,155 @@ from lerobot.utils.robot_utils import precise_sleep
 from ml_networks import torch_fix_seed
 from omegaconf import OmegaConf
 from rich.progress import track
+from vosk import KaldiRecognizer, Model
 
 from mission2 import (
     ExperimentConfig,
     Policy,
     StreamingFlowMatchingConfig,
     StreamingPolicy,
-    joint_transform,
     joint_detransform,
+    joint_transform,
     visualize_attention_video,
 )
+
+MODEL_LINK = "https://alphacephei.com/vosk/models/vosk-model-small-ja-0.22.zip"
+MODEL_NAME = "vosk-model-small-ja-0.22"
+KeywordMap = dict[str, list[str]]
+
+
+@dataclass(frozen=True)
+class AudioStreamConfig:
+    """Immutable audio configuration for the microphone stream."""
+
+    samplerate: int = 16000
+    blocksize: int = 8000
+    dtype: str = "int16"
+    channels: int = 1
+    timeout: float = 15.0
+
+
+SUSHI_KEYWORDS: KeywordMap = {
+    "まぐろ": ["まぐろ", "鮪", "マグロ", "maguro", "tuna"],
+    "サーモン": ["さーもん", "サーモン", "さーもんを", "salmon", "さて", "さっき"],
+    "卵": ["たまご", "卵", "タマゴ", "tamago", "omelette"],
+}
+
+
+@dataclass
+class ClassificationResult:
+    """Structured output for keyword classification."""
+
+    label: str | None
+    transcript: str
+    raw: dict[str, Any]
+
+
+def classify_text(keywords: KeywordMap, text: str) -> str | None:
+    normalized = text.replace("　", " ").lower().strip()
+    if not normalized:
+        return None
+    return next(
+        (label for label, words in keywords.items() if any(word in normalized for word in words)),
+        None,
+    )
+
+
+def consume_recognizer(
+    recognizer: KaldiRecognizer,
+    keywords: KeywordMap,
+    data: bytes,
+) -> ClassificationResult | None:
+    transcript, payload = recognizer_payload(recognizer, data)
+    label = classify_text(keywords, transcript)
+    if label:
+        return ClassificationResult(label=label, transcript=transcript, raw=payload)
+    return None
+
+
+def recognizer_payload(recognizer: KaldiRecognizer, data: bytes) -> tuple[str, dict[str, Any]]:
+    if recognizer.AcceptWaveform(data):
+        payload = json.loads(recognizer.Result())
+        key = "text"
+    else:
+        payload = json.loads(recognizer.PartialResult())
+        key = "partial"
+    print(payload)
+    return payload.get(key, ""), payload
+
+
+def classify_microphone(
+    recognizer: KaldiRecognizer,
+    keywords: KeywordMap,
+    config: AudioStreamConfig,
+) -> ClassificationResult:
+    start = time.monotonic()
+    for chunk in stream_microphone_audio(config):
+        result = consume_recognizer(recognizer, keywords, chunk)
+        if result:
+            return result
+        if (time.monotonic() - start) > config.timeout:
+            message = "Timed out waiting for target keyword"
+            raise TimeoutError(message)
+    message = "Timed out waiting for target keyword"
+    raise TimeoutError(message)
+
+
+def stream_microphone_audio(config: AudioStreamConfig) -> Iterator[bytes]:
+    audio_queue: queue.Queue[bytes] = queue.Queue()
+
+    def _callback(
+        indata: bytes,
+        _frames: int,
+        _time_info: dict[str, Any],
+        _status: dict[str, Any],
+    ) -> None:
+        audio_queue.put(bytes(indata))
+
+    def _generator() -> Iterator[bytes]:
+        with sounddevice.RawInputStream(
+            samplerate=config.samplerate,
+            blocksize=config.blocksize,
+            dtype=config.dtype,
+            channels=config.channels,
+            callback=_callback,
+        ):
+            while True:
+                yield next_chunk(audio_queue, config.timeout)
+
+    return _generator()
+
+
+def next_chunk(audio_queue: queue.Queue[bytes], timeout: float) -> bytes:
+    try:
+        return audio_queue.get(timeout=timeout)
+    except queue.Empty as exc:
+        message = "No audio data received within timeout period"
+        raise TimeoutError(message) from exc
+
+
+def download_model(save_dir: Path) -> None:
+    zip_path = Path(str(save_dir) + ".zip")
+    with (
+        urllib.request.urlopen(MODEL_LINK) as response,
+        zip_path.open("wb") as out_file,
+    ):
+        out_file.write(response.read())
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall(save_dir.parent)
+
+
+def voice_recognition() -> str:
+    save_dir = Path(__file__).parent / MODEL_NAME
+    if not save_dir.exists():
+        download_model(save_dir=save_dir)
+    audio_config = AudioStreamConfig()
+    model = Model(str(save_dir))
+    recognizer = KaldiRecognizer(model, audio_config.samplerate)
+    result = classify_microphone(
+        recognizer=recognizer, keywords=SUSHI_KEYWORDS, config=audio_config
+    )
+    return result.label
 
 
 def evaluation(
@@ -55,7 +201,7 @@ def evaluation(
     max_steps: int = 300,
     n_candidates: int = 1,
     robot_config: RobotConfig | None = None,
-    task: Literal["Salmon", "Tuna", "Egg"] = "Salmon"
+    task: Literal["Salmon", "Tuna", "Egg"] = "Salmon",
 ):
     """
     This script evaluates a pre-trained diffusion policy.
@@ -78,8 +224,6 @@ def evaluation(
     config: ExperimentConfig = instantiate(
         config,
     )
-    
-    
 
     path = f"models/params/{config.datamodule.id}/{model_name}/seed:{config.seed}/"
     if adjusting_methods is not None:
@@ -104,7 +248,7 @@ def evaluation(
             print(f"Attempting to load model from wandb run_path: {config.run_path}")
             api = wandb.Api()
             run = api.run(config.run_path)
-            
+
             # artifactを検索（最新のmodel artifactを取得）
             artifacts = list(run.logged_artifacts())
             model_artifact = None
@@ -113,7 +257,7 @@ def evaluation(
                     model_artifact = artifact
                     # 最新のartifactを使用（通常は最後にログされたもの）
                     break
-            
+
             # 見つからない場合は、artifact名で検索
             if model_artifact is None:
                 # artifact名のパターンで検索（train.pyで保存した形式: model-{run_id}）
@@ -125,19 +269,19 @@ def evaluation(
                     model_artifact = api.artifact(artifact_name)
                 except Exception:
                     pass
-            
+
             if model_artifact is not None:
                 # artifactをダウンロード
                 with tempfile.TemporaryDirectory() as tmpdir:
                     artifact_dir = model_artifact.download(root=tmpdir)
                     artifact_path = Path(artifact_dir)
-                    
+
                     # モデルファイルを探す
                     if load_last:
                         model_file = artifact_path / "last.ckpt"
                     else:
                         model_file = artifact_path / "model.ckpt"
-                    
+
                     if model_file.exists():
                         param = torch.load(str(model_file), map_location="cpu")["state_dict"]
                         print(f"Successfully loaded model from wandb: {model_file}")
@@ -148,16 +292,17 @@ def evaluation(
         except Exception as e:
             print(f"Warning: Failed to load model from wandb: {e}")
             import traceback
+
             traceback.print_exc()
             print("Falling back to local model")
-    
+
     # wandbからの読み込みに失敗した場合、ローカルから読み込む
     if param is None:
         if load_last:
             param_path = f"{path}/last.ckpt"
         else:
             param_path = f"{path}/model.ckpt"
-        
+
         if os.path.exists(param_path):
             param = torch.load(param_path, map_location="cpu")["state_dict"]
             print(f"Loaded model from local path: {param_path}")
@@ -171,7 +316,7 @@ def evaluation(
     for name, param in model.named_parameters():
         assert not torch.isnan(param).any(), f"NaN in {name} parameter"
         assert not torch.isinf(param).any(), f"Inf in {name} parameter"
-    
+
     # Move model to device
     device_str = f"cuda:{device}" if device >= 0 else "cpu"
     model = model.to(device_str)
@@ -208,13 +353,11 @@ def evaluation(
     # Store encoded embeddings instead of raw observations
     obs_embed_buffer = []
     pos_embed_buffer = []
-    
-   
-    task = input("What do you want to eat? (Salmon, Tuna, Egg): ").strip()
-    while task not in ["Salmon", "Tuna", "Egg"]:
-        print("Invalid task. Please enter 'Salmon', 'Tuna', or 'Egg'.")
-        task = input("What do you want to eat? (Salmon, Tuna, Egg): ").strip()
-    task_index = {"Salmon": 0, "Tuna": 1, "Egg": 2}[task]
+
+    print("Please say the task keyword (サーモン, まぐろ, 卵)...")
+    task = voice_recognition()
+    print(task)
+    task_index = {"サーモン": 0, "まぐろ": 1, "卵": 2}[task]
     goal = torch.tensor([task_index], dtype=torch.long, device=device_str)
     if model.cfg.goal_conditioned:
         goal_emb = model.goal_encoder(goal).reshape(1, 1, -1)  # (1, 1, embed_dim)
@@ -320,7 +463,7 @@ def evaluation(
     fps = 10  # Default FPS for timing control
 
     action_buffer = []
-    
+
     for t in track(range(max_steps)):
         start_loop_t = time.perf_counter()
 
@@ -334,7 +477,9 @@ def evaluation(
         observation_frame = build_dataset_frame(dataset_features, obs_processed, prefix=OBS_STR)
 
         # Process and encode the new observation
-        new_obs_embed, new_pos_embed, state_normalized = process_and_encode_observation(observation_frame)
+        new_obs_embed, new_pos_embed, state_normalized = process_and_encode_observation(
+            observation_frame
+        )
 
         # Update embed buffers (FIFO queue)
         # Remove the oldest embedding and add the new one
@@ -347,11 +492,15 @@ def evaluation(
 
         # Stack embeddings to match dataset format: (1, obs_length, embed_dim)
         if new_obs_embed is not None:
-            obs_embed = torch.stack(obs_embed_buffer, dim=0).unsqueeze(0)  # (1, obs_length, embed_dim)
+            obs_embed = torch.stack(obs_embed_buffer, dim=0).unsqueeze(
+                0
+            )  # (1, obs_length, embed_dim)
         else:
             obs_embed = None
         if new_pos_embed is not None:
-            pos_embed = torch.stack(pos_embed_buffer, dim=0).unsqueeze(0)  # (1, obs_length, embed_dim)
+            pos_embed = torch.stack(pos_embed_buffer, dim=0).unsqueeze(
+                0
+            )  # (1, obs_length, embed_dim)
         else:
             pos_embed = None
 
@@ -359,14 +508,23 @@ def evaluation(
             attentions.append(obs_embed)
         if step % inference_every == 0:
             action_chunk = model.inference(
-                batch_size=n_candidates, 
-                obs=obs_embed, pos=pos_embed, goal=goal_emb, initial_action=action.to(model.device)
+                batch_size=n_candidates,
+                obs=obs_embed,
+                pos=pos_embed,
+                goal=goal_emb,
+                initial_action=action.to(model.device),
             )
             if len(action_buffer) > model.cfg.n_obs_steps and model.cfg.pred_obs_action:
-                action_buffer = action_buffer[-model.cfg.n_obs_steps:]  # (1, n_obs_steps, action_dim)
-                action_buffer_tensor = torch.stack(action_buffer, dim=0).unsqueeze(0)  # (1, n_obs_steps, action_dim)
+                action_buffer = action_buffer[
+                    -model.cfg.n_obs_steps :
+                ]  # (1, n_obs_steps, action_dim)
+                action_buffer_tensor = torch.stack(action_buffer, dim=0).unsqueeze(
+                    0
+                )  # (1, n_obs_steps, action_dim)
                 past_actions = action_chunk[:, : model.cfg.n_obs_steps, :]
-                diff = F.l1_loss(past_actions, action_buffer_tensor, reduction="none").sum(dim=[-1, -2])  # (batch_size, n_obs_steps, action_dim)
+                diff = F.l1_loss(past_actions, action_buffer_tensor, reduction="none").sum(
+                    dim=[-1, -2]
+                )  # (batch_size, n_obs_steps, action_dim)
                 argmin = diff.argmin().item()
                 action_chunk = action_chunk[argmin]
             else:
@@ -381,7 +539,6 @@ def evaluation(
             data_config.stats["action"]["max"],
             data_config.stats["action"]["min"],
         ).squeeze(0)
-
 
         # Convert action to RobotAction format (following main() pattern)
         # make_robot_action expects a tensor, so we pass the action tensor directly
@@ -421,7 +578,7 @@ def evaluation(
         # Timing control (following main() pattern)
         dt_s = time.perf_counter() - start_loop_t
         precise_sleep(1 / fps - dt_s)
-        #precise_sleep(1)
+        # precise_sleep(1)
         if done:
             break
 
@@ -481,7 +638,7 @@ if __name__ == "__main__":
         default=None,
         help="list of adjusting methods",
     )
-    
+
     # Robot config options: either use a config file or specify individual parameters
     parser.add_argument(
         "--robot-config",
@@ -489,16 +646,12 @@ if __name__ == "__main__":
         default=None,
         help="Path to robot config YAML/JSON file. If not provided, use --robot-type, --robot-port, etc.",
     )
- 
 
     args = parser.parse_args()
     print("=======================")
     print(args.dataset)
     print("=======================")
 
-    
-    import draccus
-    from lerobot.cameras import CameraConfig
     from pathlib import Path
 
     try:
@@ -520,7 +673,6 @@ if __name__ == "__main__":
             "--robot-config file, or --robot-type and --robot-port."
         )
         raise
-    
 
     print("args.model", args.model)
     print("args.dataset", args.dataset)

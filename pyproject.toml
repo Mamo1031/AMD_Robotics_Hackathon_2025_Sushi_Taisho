@@ -24,6 +24,8 @@ dependencies = [
     "ml-networks",
     "matplotlib>=3.10.7",
     "torchcfm>=1.0.7",
+    "sounddevice>=0.5.3",
+    "vosk>=0.3.45",
 ]
 
 [project.scripts]
