@@ -47,6 +47,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/Mamo1031/AMD_Robotics_Hackathon_2025_Sushi_Taisho.git
 cd AMD_Robotics_Hackathon_2025_Sushi_Taisho
 
+# add the lerobot as a submodule
+git submodule update --init --recursive
+
 # Install dependencies and create virtual environment
 uv sync
 
