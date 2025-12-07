@@ -18,7 +18,10 @@ datamodule:
   n_iterations: 10
   policy_length: 32
   obs_length: 4
-  adjusting_methods: null
+  adjusting_methods:
+  - brightness
+  - contrast
+  - gamma
 policy:
   _target_: mission2.PolicyConfig
   obs_shape:
@@ -37,13 +40,11 @@ policy:
     num_timesteps: 100
     num_inference_steps: 20
     diff_type: ddim
-    prediction_type: epsilon
+    prediction_type: sample
   time_emb:
-    _target_: ml_networks.SoftmaxTransConfig
+    _target_: mission2.PosEmbConfig
     vector: 128
-    sigma: 0.001
-    min: 0.0
-    max: 1.0
+    scale: 1.0
   cond_cfg:
     _target_: ml_networks.MLPConfig
     hidden_dim: 128
@@ -92,31 +93,22 @@ policy:
         kernel_size: 7
         stride: 2
         padding: 0
-        norm: group
-        norm_cfg:
-          num_groups: 8
         activation: Mish
       - _target_: ml_networks.ConvConfig
         kernel_size: 5
         stride: 2
         padding: 0
-        norm: group
-        norm_cfg:
-          num_groups: 8
         activation: Mish
       - _target_: ml_networks.ConvConfig
         kernel_size: 3
         stride: 1
         padding: 0
-        norm: group
-        norm_cfg:
-          num_groups: 8
         activation: Mish
     full_connection:
       _target_: ml_networks.SpatialSoftmaxConfig
-      is_argmax: true
+      is_argmax: false
   loss_cfg:
-    early_stop: 1000
+    early_stop: 10
   optimizer_cfg:
     name: AdaBelief
     lr: 0.0006
@@ -133,5 +125,5 @@ trainer:
 callbacks:
 - _target_: mission2.RichProgressBar
 - _target_: mission2.VisualizePrediction
-  save_every_n_epoch: 10
-run_path: mamo1031-keio-jp/lerobot/qark8aiq
+  save_every_n_epoch: 1
+run_path: mamo1031-keio-jp/lerobot/pox6g5n0
