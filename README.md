@@ -16,8 +16,6 @@ This project simulates a rotary sushi bar ('Kaiten-sushi') using a motorized toy
 
 ![Sushi-Bot demo](assets/demo.gif)
 
-
-
 ## ✨ Features
 <!-- TODO: 実装した機能の詳細を追記 -->
 - **??:** ??

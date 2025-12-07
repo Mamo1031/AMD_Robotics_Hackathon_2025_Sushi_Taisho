@@ -1,0 +1,58 @@
+{
+  "os":  "Linux-6.8.0-86-generic-x86_64-with-glibc2.35",
+  "python":  "CPython 3.10.17",
+  "startedAt":  "2025-12-07T01:26:03.225803Z",
+  "args":  [
+    "--seed",
+    "4",
+    "--device",
+    "0",
+    "--epochs",
+    "5000",
+    "--dataset",
+    "Mamo1031/sushi_dynamic",
+    "--train",
+    "--model",
+    "streaming:re",
+    "--adjusting_methods",
+    "brightness",
+    "contrast",
+    "gamma",
+    "sharpness"
+  ],
+  "program":  "/home/fujii/work/AMD_Robotics_Hackathon_2025_Sushi_Taisho/mission2/code/scripts/train.py",
+  "codePath":  "mission2/code/scripts/train.py",
+  "codePathLocal":  "code/scripts/train.py",
+  "git":  {
+    "remote":  "https://github.com/Mamo1031/AMD_Robotics_Hackathon_2025_Sushi_Taisho.git",
+    "commit":  "e2240f10f9b70c389b4a85aeebdfad96bb32e8f0"
+  },
+  "email":  "mamoru_ota1031@keio.jp",
+  "root":  "./wandb/",
+  "host":  "gf-rtx4090-1",
+  "executable":  "/home/fujii/work/AMD_Robotics_Hackathon_2025_Sushi_Taisho/.venv/bin/python3",
+  "cpu_count":  16,
+  "cpu_count_logical":  24,
+  "gpu":  "NVIDIA GeForce RTX 4090",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "2014574526464",
+      "used":  "1327734349824"
+    }
+  },
+  "memory":  {
+    "total":  "33486340096"
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA GeForce RTX 4090",
+      "memoryTotal":  "25757220864",
+      "cudaCores":  16384,
+      "architecture":  "Ada",
+      "uuid":  "GPU-79a0188f-7ffd-419a-80f1-6332bfeec7ff"
+    }
+  ],
+  "cudaVersion":  "13.0",
+  "writerId":  "fxpweunh1d2hfgc0p1pmrvojprv2a1te"
+}

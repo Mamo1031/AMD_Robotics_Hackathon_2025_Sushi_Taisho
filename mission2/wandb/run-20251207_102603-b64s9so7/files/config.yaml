@@ -1,0 +1,276 @@
+_wandb:
+    value:
+        cli_version: 0.21.4
+        e:
+            fxpweunh1d2hfgc0p1pmrvojprv2a1te:
+                args:
+                    - --seed
+                    - "4"
+                    - --device
+                    - "0"
+                    - --epochs
+                    - "5000"
+                    - --dataset
+                    - Mamo1031/sushi_dynamic
+                    - --train
+                    - --model
+                    - streaming:re
+                    - --adjusting_methods
+                    - brightness
+                    - contrast
+                    - gamma
+                    - sharpness
+                codePath: mission2/code/scripts/train.py
+                codePathLocal: code/scripts/train.py
+                cpu_count: 16
+                cpu_count_logical: 24
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "2014574526464"
+                        used: "1327734349824"
+                email: mamoru_ota1031@keio.jp
+                executable: /home/fujii/work/AMD_Robotics_Hackathon_2025_Sushi_Taisho/.venv/bin/python3
+                git:
+                    commit: e2240f10f9b70c389b4a85aeebdfad96bb32e8f0
+                    remote: https://github.com/Mamo1031/AMD_Robotics_Hackathon_2025_Sushi_Taisho.git
+                gpu: NVIDIA GeForce RTX 4090
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 16384
+                      memoryTotal: "25757220864"
+                      name: NVIDIA GeForce RTX 4090
+                      uuid: GPU-79a0188f-7ffd-419a-80f1-6332bfeec7ff
+                host: gf-rtx4090-1
+                memory:
+                    total: "33486340096"
+                os: Linux-6.8.0-86-generic-x86_64-with-glibc2.35
+                program: /home/fujii/work/AMD_Robotics_Hackathon_2025_Sushi_Taisho/mission2/code/scripts/train.py
+                python: CPython 3.10.17
+                root: ./wandb/
+                startedAt: "2025-12-07T01:26:03.225803Z"
+                writerId: fxpweunh1d2hfgc0p1pmrvojprv2a1te
+        m:
+            - "1": trainer/global_step
+              "6":
+                - 3
+              "7": []
+            - "2": '*'
+              "5": 1
+              "6":
+                - 1
+              "7": []
+        python_version: 3.10.17
+        t:
+            "1":
+                - 1
+                - 5
+                - 9
+                - 41
+                - 49
+                - 50
+                - 51
+                - 53
+                - 63
+                - 71
+                - 83
+                - 103
+            "2":
+                - 1
+                - 5
+                - 9
+                - 41
+                - 49
+                - 50
+                - 51
+                - 53
+                - 63
+                - 71
+                - 83
+                - 103
+            "3":
+                - 7
+                - 13
+                - 15
+                - 16
+                - 66
+            "4": 3.10.17
+            "5": 0.21.4
+            "12": 0.21.4
+            "13": linux-x86_64
+action_dim:
+    value: 6
+activation:
+    value: Mish
+callbacks:
+    value:
+        - <pytorch_lightning.callbacks.progress.rich_progress.RichProgressBar object at 0x7c54a522cbb0>
+        - <mission2.code.src.callbacks.VisualizePrediction object at 0x7c54a522c5b0>
+        - <mission2.code.src.callbacks.WandbModelCheckpoint object at 0x7c54a522cac0>
+        - <pytorch_lightning.callbacks.early_stopping.EarlyStopping object at 0x7c54a522e2c0>
+        - <pytorch_lightning.callbacks.rich_model_summary.RichModelSummary object at 0x7c54a50ace50>
+datamodule:
+    value:
+        action_noise: false
+        adjusting_methods:
+            - brightness
+            - contrast
+            - gamma
+            - sharpness
+        batch_size: 64
+        fps: 10
+        id: Mamo1031/sushi_dynamic
+        n_iterations: 10
+        obs_length: 2
+        policy_length: 32
+        pred_obs_action: false
+        seed: 4
+device:
+    value: 0
+epochs:
+    value: 5000
+log_every:
+    value: 1
+obs_shape:
+    value:
+        - 3
+        - 320
+        - 240
+policy:
+    value:
+        action_dim: 6
+        cond_cfg:
+            hidden_dim: 128
+            linear_cfg:
+                activation: Mish
+                bias: true
+                dropout: 0
+                norm: none
+                norm_first: false
+            n_layers: 1
+            output_activation: Tanh
+        ema:
+            decay: 0.999
+            use_num_updates: true
+        encoder:
+            backbone:
+                attention: null
+                channels:
+                    - 32
+                    - 64
+                    - 64
+                conv_cfgs:
+                    - activation: ELU
+                      bias: true
+                      dilation: 1
+                      dropout: 0
+                      groups: 1
+                      kernel_size: 7
+                      norm: none
+                      norm_cfg: {}
+                      norm_first: false
+                      output_padding: 0
+                      padding: 0
+                      padding_mode: zeros
+                      scale_factor: 0
+                      stride: 1
+                    - activation: ELU
+                      bias: true
+                      dilation: 1
+                      dropout: 0
+                      groups: 1
+                      kernel_size: 5
+                      norm: none
+                      norm_cfg: {}
+                      norm_first: false
+                      output_padding: 0
+                      padding: 0
+                      padding_mode: zeros
+                      scale_factor: 0
+                      stride: 2
+                    - activation: ELU
+                      bias: true
+                      dilation: 1
+                      dropout: 0
+                      groups: 1
+                      kernel_size: 3
+                      norm: none
+                      norm_cfg: {}
+                      norm_first: false
+                      output_padding: 0
+                      padding: 0
+                      padding_mode: zeros
+                      scale_factor: 0
+                      stride: 1
+                init_channel: 16
+            full_connection:
+                additional_layer: null
+                eps: 1e-06
+                is_argmax: true
+                is_straight_through: false
+                temperature: 1
+        framework_cfg:
+            num_inference_steps: 32
+            sigma_0: 0.05
+            stabilization: 0.25
+        freeze_encoder: false
+        goal_encoder:
+            hidden_dim: 128
+            linear_cfg:
+                activation: Mish
+                bias: true
+                dropout: 0
+                norm: none
+                norm_first: false
+            n_layers: 1
+            output_activation: Tanh
+        loss_cfg:
+            early_stop: 10
+        n_obs_steps: 2
+        obs_dim: 128
+        obs_length: 1
+        obs_shape:
+            - 3
+            - 320
+            - 240
+        optimizer_cfg:
+            amsgrad: true
+            lr: 0.0006
+            name: AdaBelief
+        policy:
+            hidden_dim: 128
+            linear_cfg:
+                activation: Mish
+                bias: true
+                dropout: 0
+                norm: none
+                norm_first: false
+            n_layers: 3
+            output_activation: Identity
+        policy_length: 32
+        pos_encoder: null
+        pred_obs_action: false
+        time_emb:
+            max: 32
+            min: 0
+            n_ignore: 0
+            sigma: 0.001
+            vector: 128
+        use_data_mean_std: false
+        use_uniform: false
+run_path:
+    value: mamo1031-keio-jp/lerobot/7firrsk9
+seed:
+    value: 4
+trainer:
+    value:
+        accelerator: gpu
+        check_val_every_n_epoch: 1
+        deterministic: false
+        devices:
+            - 0
+        gradient_clip_algorithm: null
+        gradient_clip_val: null
+        log_every_n_steps: 1
+        precision: 32
