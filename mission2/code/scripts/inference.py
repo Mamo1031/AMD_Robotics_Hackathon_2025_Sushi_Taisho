@@ -80,7 +80,7 @@ def evaluation(
         config,
     )
     
-    task_index = {"Salmon": 0, "Tuna": 1, "Egg": 2}[task]
+    
 
     path = f"models/params/{config.datamodule.id}/{model_name}/seed:{config.seed}/"
     if adjusting_methods is not None:
@@ -209,6 +209,18 @@ def evaluation(
     # Store encoded embeddings instead of raw observations
     obs_embed_buffer = []
     pos_embed_buffer = []
+    
+   
+    task = input("What do you want to eat? (Salmon, Tuna, Egg): ").strip()
+    while task not in ["Salmon", "Tuna", "Egg"]:
+        print("Invalid task. Please enter 'Salmon', 'Tuna', or 'Egg'.")
+        task = input("What do you want to eat? (Salmon, Tuna, Egg): ").strip()
+    task_index = {"Salmon": 0, "Tuna": 1, "Egg": 2}[task]
+    goal = torch.tensor([task_index], dtype=torch.long, device=device_str)
+    if model.cfg.goal_conditioned:
+        goal_emb = model.goal_encoder(goal).reshape(1, 1, -1)  # (1, 1, embed_dim)
+    else:
+        goal_emb = None
 
     # Get initial observation from robot
     obs = robot.get_observation()
@@ -272,13 +284,13 @@ def evaluation(
         state_batch = state_normalized.unsqueeze(0).unsqueeze(0).to(device_str)  # (1, 1, state_dim)
 
         # Encode
-        if not model.cfg.obs_only:
+        if not model.cfg.pos_only:
             obs_embed = model.encoder(image_batch)  # (1, 1, embed_dim)
             obs_embed = obs_embed[0, 0]  # Remove batch and sequence dims: (embed_dim,)
         else:
             obs_embed = None
 
-        if not model.cfg.pos_only:
+        if not model.cfg.obs_only:
             pos_embed = model.pos_encoder(state_batch)  # (1, 1, embed_dim)
             pos_embed = pos_embed[0, 0]  # Remove batch and sequence dims: (embed_dim,)
         else:
@@ -308,13 +320,8 @@ def evaluation(
 
     fps = 10  # Default FPS for timing control
 
-    goal = torch.tensor([task_index], dtype=torch.long, device=device_str)
-    if model.cfg.goal_conditioned:
-        goal_emb = model.goal_encoder(goal).reshape(1, 1, -1)  # (1, 1, embed_dim)
-    else:
-        goal_emb = None
     action_buffer = []
-    input("Press Enter to start evaluation on the robot...")
+    
     for t in track(range(max_steps)):
         start_loop_t = time.perf_counter()
 
@@ -483,6 +490,7 @@ if __name__ == "__main__":
         default=None,
         help="Path to robot config YAML/JSON file. If not provided, use --robot-type, --robot-port, etc.",
     )
+ 
 
     args = parser.parse_args()
     print("=======================")
@@ -528,5 +536,4 @@ if __name__ == "__main__":
         max_steps=args.max_steps,
         n_candidates=args.n_candidates,
         robot_config=robot_config,
-        task="Tuna",
     )
