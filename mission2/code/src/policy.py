@@ -356,8 +356,8 @@ class Policy(PolicyBase):
 
                 # 2. compute previous image: x_t -> x_t-1
                 trajectory = self.framework.step(
-                    pred_noise, t, trajectory, 
-                    ).prev_sample
+                    pred_noise.cpu(), t.cpu(), trajectory.cpu(), 
+                    ).prev_sample.to(self.device)
 
 
         return trajectory
