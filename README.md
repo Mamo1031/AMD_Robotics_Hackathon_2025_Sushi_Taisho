@@ -16,6 +16,25 @@ This project simulates a rotary sushi bar ('Kaiten-sushi') using a motorized toy
 
 ![Sushi-Bot demo](assets/demo.gif)
 
+## ✨ Features
+
+### 🚀 Ultra-Lightweight & High-Performance Model
+- **Custom-Optimized Architecture**: Specialized model with only **258k parameters** for efficient real-time control
+- **Superior Performance**: Achieved the highest success rate compared to state-of-the-art VLA architectures:
+  - Ours: 258k parameters
+  - SmolVLA: ~450M parameters
+  - pi_0, pi_0.5: ~3.3B parameters
+- **Real-World Validation**: All architectures trained and tested on the physical SO-101 robot
+
+### 🛡️ Robust Training Pipeline with Data Augmentation
+- **Environmental Robustness**: Observation Augmentation handles varying lighting conditions (Brightness, Contrast, Gamma, Sharpness)
+- **Visual Interpretability**: Spatial Softmax layers visualize feature points to verify where the robot is focusing
+- **Dynamics-Aware Data Collection**: 90 episodes with varied initial positions to capture environment dynamics
+
+### 📈 Scalability & Reproducibility
+- **Scalable Object Adaptation**: Currently supports 3 classes (Salmon, Tuna, Egg). New items can be added by collecting targeted data
+- **Easy Deployment**: System can be deployed on any standard environment within minutes following the installation guide
+
 
 ## 📦 Installation
 ### Setup Instructions
