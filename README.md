@@ -16,21 +16,8 @@ This project simulates a rotary sushi bar ('Kaiten-sushi') using a motorized toy
 
 ![Sushi-Bot demo](assets/demo.gif)
 
-## ✨ Features
-<!-- TODO: 実装した機能の詳細を追記 -->
-- **??:** ??
-- **??:** ??
-
-
 
 ## 📦 Installation
-### Prerequisites
-<!-- TODO: Prerequisitesを追記 -->
-- Python 3.8+
-- [uv](https://github.com/astral-sh/uv) (Python package manager)
-- ??
-
-
 ### Setup Instructions
 ```bash
 # Install uv (if not already installed)
@@ -48,74 +35,38 @@ uv sync
 source .venv/bin/activate  # On Linux/Mac
 # On Windows: .venv\Scripts\activate
 
-# Additional setup steps
-# TODO: 追加のセットアップ手順を追記
 ```
 
 
 ### Environment Variables
 <!-- TODO: 必要な環境変数を追記 -->
+- **HUGGINGFACE_API_TOKEN**
+- **WANDB_API_KEY**
 ```bash
-# TODO: Environment variables as needed
+wandb login
+huggingface-cli login
 ```
-
-
-
 ## 📊 Dataset
 <!-- TODO: 実際のデータセット情報を確定させたら更新 -->
 - **Description:**  
-  - [TODO: 1〜2文で「どんなタスクのデータか」「どういうフォーマットか」を書く]
+  - Collected **90** episodes with varied initial positions and settings to capture the dynamics of the environment.
 - **Hugging Face URL:**  
-  - [TODO: Hugging FaceにアップロードしたらデータセットのURLを追記]
+  - [https://huggingface.co/datasets/Mamo1031/sushi_dynamic](https://huggingface.co/datasets/Mamo1031/sushi_dynamic)
 
 
-
-## 🤖 Model Training
-### Model Architecture
-<!-- TODO: 使用したモデルの詳細を追記 -->
-?? (TODO: モデルの詳細を追記)
-
-
-### Training Scripts
-<!-- TODO: トレーニングスクリプトの使用方法を追記 -->
-```bash
-# Train the model (optional)
-uv run train                # uses config/training_config.yaml by default
-
-# Or specify a custom config
-uv run train configs/custom_training.yaml
-```
-
-
+## 🤖 Model
 ### Trained Models
 <!-- TODO: トレーニング済みモデルの情報を追記 -->
-- **Model Information:**  
-  - [TODO: トレーニング済みモデルの情報を追記]
 - **Hugging Face URL:**  
-  - [TODO: Hugging FaceにアップロードしたらモデルのURLを追記]
+- [Mamo1031/sushi-taisho-streaming](https://huggingface.co/Mamo1031/sushi-taisho-streaming)
+### Model Details
+- [mission2/README.md](mission2/README.md)
 
-
-
-## 🚀 Usage
-### Running Inference
-
-<!-- TODO: 推論の実行方法を追記 -->
-```bash
-# Basic grasping demo (uses config/inference_config.yaml by default)
-uv run infer --mode grasp
-
-# VLA demo with natural language instruction (default config)
-uv run infer --mode vla --instruction "I want to eat salmon."
-
-# Or specify a custom inference config
-uv run infer configs/custom_inference.yaml --mode vla --instruction "I want to eat salmon."
-```
 
 
 
 ## 🎥 Demo Video
-<!-- TODO: デモビデオのリンクを追記 -->
-Link to demo video: [TODO: デモビデオのリンクを追記]
+- [Sushi-Bot egg](https://drive.google.com/file/d/18KnuXQMYKmlZ_oblMTRiSq74vVhkm9Jy/view?usp=sharing)
 
 
 ## 📁 Project Structure
@@ -150,10 +101,8 @@ AMD_Robotics_Hackathon_2025_Sushi_Taisho/
 
 
 ## 🔮 Future Improvements
-<!-- TODO: 今後の改善点を追記 -->
-?? (TODO: 今後の改善点を追記)
-
-
+  - Enhance the voice recognition accuracy 
+  - Add more sushi varieties and complex orders
 
 ## 📄 License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
