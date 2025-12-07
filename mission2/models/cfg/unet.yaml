@@ -1,0 +1,152 @@
+---
+_target_: mission2.ExperimentConfig
+epochs: null
+seed: null
+log_every: 1
+obs_shape: null
+action_dim: null
+device: null
+activation: Mish
+
+datamodule:
+  _target_: mission2.DatasetConfig
+  batch_size: 128
+  seed: ${seed}
+  action_noise: false
+  id: lerobot-rope
+  n_iterations: 100
+  policy_length: ${policy.policy_length}
+  obs_length: ${policy.n_obs_steps}
+
+policy:
+  _target_: mission2.PolicyConfig
+  obs_shape: ${obs_shape}
+  obs_dim: 32
+  action_dim: ${action_dim}
+  policy_length: 32
+  n_obs_steps: 1
+
+  ema:
+    decay: 0.995
+    use_num_updates: true
+
+  framework_cfg:
+    _target_: mission2.DiffuserConfig
+    num_timesteps: 100
+    num_inference_steps: 10
+    diff_type: ddim
+    prediction_type: epsilon
+  time_emb:
+    _target_: ml_networks.SoftmaxTransConfig
+    vector: ${policy.obs_dim}
+    sigma: 0.001
+    min: 0.0
+    max: 1.0
+
+  cond_cfg:
+    _target_: ml_networks.MLPConfig
+    hidden_dim: 128
+    output_activation: ${activation}
+    n_layers: 1
+    linear_cfg:
+      _target_: ml_networks.LinearConfig
+      activation: ${activation}
+
+  policy:
+    _target_: ml_networks.UNetConfig
+    cond_pred_scale: true
+    has_attn: true
+    nhead: 8
+
+    channels: [16, 32, 64]
+    conv_cfg:
+      _target_: ml_networks.ConvConfig
+      kernel_size: 5
+      stride: 1
+      padding: 2
+      activation: ${activation}
+      dropout: 0.1
+
+  pos_encoder:
+    _target_: ml_networks.MLPConfig
+    hidden_dim: 128
+    output_activation: ${activation}
+    n_layers: 1
+    linear_cfg:
+      _target_: ml_networks.LinearConfig
+      activation: ${activation}
+
+  goal_encoder:
+    _target_: ml_networks.MLPConfig
+    hidden_dim: 128
+    output_activation: ${activation}
+    n_layers: 1
+    linear_cfg:
+      _target_: ml_networks.LinearConfig
+      activation: ${activation}
+
+
+  encoder:
+    _target_: ml_networks.EncoderConfig
+    backbone:
+      _target_: ml_networks.ConvNetConfig
+      channels: [16, 32, 16]
+      conv_cfgs:
+        - 
+          _target_: ml_networks.ConvConfig
+          kernel_size: 7
+          stride: 1
+          padding: 0
+          norm: group
+          norm_cfg:
+            num_groups: 8
+          activation: ${activation}
+        -
+          _target_: ml_networks.ConvConfig
+          kernel_size: 5
+          stride: 2
+          padding: 0
+          norm: group
+          norm_cfg:
+            num_groups: 8
+          activation: ${activation}
+        -
+          _target_: ml_networks.ConvConfig
+          kernel_size: 3
+          stride: 1
+          padding: 0
+          norm: group
+          norm_cfg:
+            num_groups: 8
+          activation: ${activation}
+
+    full_connection:
+      _target_: ml_networks.SpatialSoftmaxConfig
+      is_argmax: true
+
+  loss_cfg:
+    early_stop: 1000
+
+  optimizer_cfg:
+    name: AdaBelief
+    lr: 0.0006
+    amsgrad: true
+
+trainer:
+  _target_: mission2.TrainerConfig
+  accelerator: gpu
+  devices:
+    - ${device}
+  deterministic: false
+  precision: 32
+  log_every_n_steps: 1
+  check_val_every_n_epoch: ${log_every}
+
+
+callbacks:
+  -
+    _target_: mission2.RichProgressBar
+  
+  -
+    _target_: mission2.VisualizePrediction
+    save_every_n_epoch: 50

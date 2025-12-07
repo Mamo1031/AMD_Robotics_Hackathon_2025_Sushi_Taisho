@@ -13,9 +13,11 @@
 
 
 ## 🎯 Summary
-This project simulates a rotary sushi bar ('Kaiten-sushi') using a motorized toy train track. The SO-101 robot arm is tasked with dynamically tracking and picking up sushi samples moving along the rails.
+<!-- TODO: プロジェクトの詳細な説明を追記 -->
+This project demonstrates a robotic arm (SO-101) capable of picking up sushi samples from a moving conveyor belt.
 
-![Sushi-Bot demo](assets/demo.gif)
+<!-- TODO: デモGIFへのリンクを差し替え -->
+![Sushi-Bot demo](assets/test.gif)
 
 
 
@@ -136,6 +138,7 @@ AMD_Robotics_Hackathon_2025_Sushi_Taisho/
 │   └── wandb/
 │       └── [latest run directory copied from wandb of your training job]
 └── mission2/
+    ├── README.md              # Mission 2の詳細な使用方法
     ├── code/
     │   ├── config/
     │   │   ├── training_config.yaml
@@ -149,6 +152,12 @@ AMD_Robotics_Hackathon_2025_Sushi_Taisho/
     └── wandb/
         └── [latest run directory copied from wandb of your training job]
 ```
+
+## 📖 Mission別ドキュメント
+
+各ミッションの詳細な使用方法については、以下のドキュメントを参照してください：
+
+- **[Mission 2: Flow Matching Policy](mission2/README.md)** - Flow Matchingベースのポリシー学習・推論システムの使用方法
 
 
 

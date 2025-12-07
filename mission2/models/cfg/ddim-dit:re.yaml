@@ -1,0 +1,129 @@
+_target_: mission2.ExperimentConfig
+epochs: 5000
+seed: 4
+log_every: 1
+obs_shape:
+- 3
+- 320
+- 240
+action_dim: 6
+device: 0
+activation: Mish
+datamodule:
+  _target_: mission2.DatasetConfig
+  batch_size: 256
+  seed: 4
+  action_noise: false
+  id: Mamo1031/sushi_dynamic
+  n_iterations: 10
+  policy_length: 32
+  obs_length: 4
+  adjusting_methods:
+  - brightness
+  - contrast
+  - gamma
+policy:
+  _target_: mission2.PolicyConfig
+  obs_shape:
+  - 3
+  - 320
+  - 240
+  obs_dim: 128
+  action_dim: 6
+  policy_length: 32
+  n_obs_steps: 4
+  ema:
+    decay: 0.999
+    use_num_updates: true
+  framework_cfg:
+    _target_: mission2.DiffuserConfig
+    num_timesteps: 100
+    num_inference_steps: 20
+    diff_type: ddim
+    prediction_type: sample
+  time_emb:
+    _target_: mission2.PosEmbConfig
+    vector: 128
+    scale: 1.0
+  cond_cfg:
+    _target_: ml_networks.MLPConfig
+    hidden_dim: 128
+    output_activation: Identity
+    n_layers: 1
+    linear_cfg:
+      _target_: ml_networks.LinearConfig
+      activation: Mish
+  policy:
+    _target_: mission2.DiTConfig
+    input_dim: 6
+    cond_step: 4
+    cond_dim: 128
+    horizon: 32
+    d_model: 128
+    n_layers: 4
+    mlp_ratio: 4.0
+    nhead: 8
+    learn_sigma: false
+  pos_encoder:
+    _target_: ml_networks.MLPConfig
+    hidden_dim: 128
+    output_activation: Identity
+    n_layers: 1
+    linear_cfg:
+      _target_: ml_networks.LinearConfig
+      activation: Mish
+  goal_encoder:
+    _target_: ml_networks.MLPConfig
+    hidden_dim: 128
+    output_activation: Identity
+    n_layers: 1
+    linear_cfg:
+      _target_: ml_networks.LinearConfig
+      activation: Mish
+  encoder:
+    _target_: ml_networks.EncoderConfig
+    backbone:
+      _target_: ml_networks.ConvNetConfig
+      channels:
+      - 32
+      - 64
+      - 64
+      conv_cfgs:
+      - _target_: ml_networks.ConvConfig
+        kernel_size: 7
+        stride: 2
+        padding: 0
+        activation: Mish
+      - _target_: ml_networks.ConvConfig
+        kernel_size: 5
+        stride: 2
+        padding: 0
+        activation: Mish
+      - _target_: ml_networks.ConvConfig
+        kernel_size: 3
+        stride: 1
+        padding: 0
+        activation: Mish
+    full_connection:
+      _target_: ml_networks.SpatialSoftmaxConfig
+      is_argmax: false
+  loss_cfg:
+    early_stop: 10
+  optimizer_cfg:
+    name: AdaBelief
+    lr: 0.0006
+    amsgrad: true
+trainer:
+  _target_: mission2.TrainerConfig
+  accelerator: gpu
+  devices:
+  - 0
+  deterministic: false
+  precision: 32
+  log_every_n_steps: 1
+  check_val_every_n_epoch: 1
+callbacks:
+- _target_: mission2.RichProgressBar
+- _target_: mission2.VisualizePrediction
+  save_every_n_epoch: 1
+run_path: mamo1031-keio-jp/lerobot/pox6g5n0

@@ -1,0 +1,12 @@
+_target_: lerobot.robots.so101_follower.config_so101_follower.SO101FollowerConfig
+port: /dev/ttyACM1
+id: my_awesome_follower_arm
+cameras:
+  main: 
+    _target_: lerobot.cameras.opencv.OpenCVCameraConfig
+    index_or_path: 
+      _target_: pathlib.Path
+      _args_: ["/dev/video4"]
+    width: 320
+    height: 240
+    fps: 30
