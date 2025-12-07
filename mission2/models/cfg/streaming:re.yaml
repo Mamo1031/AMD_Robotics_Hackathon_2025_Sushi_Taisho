@@ -119,4 +119,4 @@ callbacks:
 - _target_: mission2.RichProgressBar
 - _target_: mission2.VisualizePrediction
   save_every_n_epoch: 1
-run_path: mamo1031-keio-jp/lerobot/7firrsk9
+run_path: mamo1031-keio-jp/lerobot/b64s9so7
