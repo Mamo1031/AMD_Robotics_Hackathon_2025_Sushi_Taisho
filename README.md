@@ -77,25 +77,19 @@ AMD_Robotics_Hackathon_2025_Sushi_Taisho/
 ├── uv.lock
 ├── LICENSE
 ├── assets/
-│   └── test.gif
+│   └── demo.gif
 ├── mission1/
 │   ├── code/
 │   │   └── [code and script]
 │   └── wandb/
-│       └── [latest run directory copied from wandb of your training job]
+│       └── [run logs]
 └── mission2/
     ├── code/
-    │   ├── config/
-    │   │   ├── training_config.yaml
-    │   │   └── inference_config.yaml
-    │   ├── scripts/
-    │   │   ├── train.py
-    │   │   └── inference.py
-    │   └── src/
-    │       ├── __init__.py
-    │       └── cli.py
-    └── wandb/
-        └── [latest run directory copied from wandb of your training job]
+    │   ├── config/     # Configuration files
+    │   ├── scripts/    # Training and inference scripts
+    │   └── src/        # Core implementation modules
+    ├── models/         # Model configurations
+    └── wandb/          # Experiment logs
 ```
 
 
