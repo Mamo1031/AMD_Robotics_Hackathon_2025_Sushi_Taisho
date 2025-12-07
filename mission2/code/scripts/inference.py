@@ -71,7 +71,7 @@ def evaluation(
 
     data_config = LeRobotDatasetMetadata(config.datamodule.id)
     config.action_dim = data_config.features["action"]["shape"][0]
-    config.obs_shape = list(data_config.features["observation.images.wrist"]["shape"])[::-1]
+    config.obs_shape = list(data_config.features["observation.images.main"]["shape"])[::-1]
 
     torch_fix_seed(config.seed)
 
@@ -89,9 +89,9 @@ def evaluation(
     os.makedirs(log_path, exist_ok=True)
     os.makedirs(path, exist_ok=True)
     if isinstance(config.policy.framework_cfg, StreamingFlowMatchingConfig):
-        model = StreamingPolicy(config.policy)
+        model = StreamingPolicy(data_config.total_tasks, config.policy)
     else:
-        model = Policy(data_config.features["task_index"]["shape"], config.policy)
+        model = Policy(data_config.total_tasks, config.policy)
     model.eval()
     model.freeze()
 
@@ -306,7 +306,7 @@ def evaluation(
     step = 0
     done = False
 
-    fps = 30  # Default FPS for timing control
+    fps = 10  # Default FPS for timing control
 
     goal = torch.tensor([task_index], dtype=torch.long, device=device_str)
     if model.cfg.goal_conditioned:
@@ -314,6 +314,7 @@ def evaluation(
     else:
         goal_emb = None
     action_buffer = []
+    input("Press Enter to start evaluation on the robot...")
     for t in track(range(max_steps)):
         start_loop_t = time.perf_counter()
 
@@ -353,12 +354,13 @@ def evaluation(
         if step % inference_every == 0:
             action_chunk = model.inference(
                 batch_size=n_candidates, 
-                obs=obs_embed, pos=pos_embed, goal=goal_emb, initial_action=action
+                obs=obs_embed, pos=pos_embed, goal=goal_emb, initial_action=action.to(model.device)
             )
             if len(action_buffer) > model.cfg.n_obs_steps and model.cfg.pred_obs_action:
-                action_buffer = action_buffer[-model.cfg.n_obs_steps:].unsqueeze(0)  # (1, n_obs_steps, action_dim)
+                action_buffer = action_buffer[-model.cfg.n_obs_steps:]  # (1, n_obs_steps, action_dim)
+                action_buffer_tensor = torch.stack(action_buffer, dim=0).unsqueeze(0)  # (1, n_obs_steps, action_dim)
                 past_actions = action_chunk[:, : model.cfg.n_obs_steps, :]
-                diff = F.l1_loss(past_actions, action_buffer, reduction="none").sum(dim=[-1, -2])  # (batch_size, n_obs_steps, action_dim)
+                diff = F.l1_loss(past_actions, action_buffer_tensor, reduction="none").sum(dim=[-1, -2])  # (batch_size, n_obs_steps, action_dim)
                 argmin = diff.argmin().item()
                 action_chunk = action_chunk[argmin]
             else:
@@ -412,8 +414,8 @@ def evaluation(
 
         # Timing control (following main() pattern)
         dt_s = time.perf_counter() - start_loop_t
-        # precise_sleep(1 / fps - dt_s)
-        precise_sleep(1)
+        precise_sleep(1 / fps - dt_s)
+        #precise_sleep(1)
         if done:
             break
 
@@ -526,4 +528,5 @@ if __name__ == "__main__":
         max_steps=args.max_steps,
         n_candidates=args.n_candidates,
         robot_config=robot_config,
+        task="Tuna",
     )
